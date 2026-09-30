@@ -67,6 +67,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
 
 ## Final Review
 
+- [ ] Room around the TV (learner request, built here): a layered room (wall with a window, desk, unbranded drink can, photo frame with a fixed photo) that moves opposite to the cursor, window light as its own layer, VHS effects kept inside the screen, still on touch screens and with reduced motion. The learner supplies the room art before this review; AI art must have no logos or watermarks and is credited in the README.
 - [ ] Final review complete — feedback resolved and learner confirms ready to ship
 
 ## Code Tour and App Map

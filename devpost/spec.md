@@ -279,6 +279,7 @@ Stored in `assets/fonts/` with its license. Loaded with `@font-face` in `base.cs
 - **CSS confirmed over WebGL at the start of `5-build`.** The learner asked whether the app could switch to WebGL for 3D, since 27 days remain. Three options were weighed: keep CSS, a hybrid WebGL shader on the Playback screen only, or a full 3D scene. The learner chose to keep CSS, so the stack and effect approach above are unchanged.
 - **Flicker slow and soft, never fast blinking; with reduced motion, flicker and glitch off, scanlines stay.** Learner addition.
 - **Demo shows the `.ics` opening in Outlook on the laptop**, so it's all in one screen recording. Test the Android phone too, and document any alarm or file-opening problem in the README as a limitation.
+- **A room around the TV, added during `5-build` for the final review** (see `prd.md > Look and Feel`): layered room images that move opposite to the cursor, done with CSS transforms and pointer events rather than WebGL; window light as its own layer; VHS effects stay inside the screen; still on touch screens and with reduced motion. AI-generated art is allowed without logos or watermarks and is credited in the README. A fixed photo for now; uploading your own photo is Later.
 
 ### Implementation details derived from those (AI defaults, accepted by the learner in review)
 - JS modules, served locally with `python -m http.server 8000` (learner confirmed Python 3.11 is installed).
@@ -287,6 +288,7 @@ Stored in `assets/fonts/` with its license. Loaded with `@font-face` in `base.cs
 - Playback pacing: blue screen about 1.2 s, about 2.5 s between answers, "NO SIGNAL" about 1.2 s. Tuned by feel during the build.
 - `--vhs` values per screen: 0.3 record, 0.5 shelf and results, 1.0 playback.
 - The app sits at the repo root.
+- Record Screen details from the first build step, accepted by the learner: the chosen date echoed in VCR format beside its label (the date picker's own format is ambiguous), a BACK button that returns to the shelf and keeps the typing, the four questions in two columns so they fit one screen, the TV sized to the window's height, the ● ■ ▶ symbols drawn in CSS (VT323 has no glyphs for them), and the REC dot's blink turned off with reduced motion.
 
 ### The useful unknown
 **"How is the VHS effect made on the web, and is it like a shader in Unity?"** Clarified in conversation. A real web shader (WebGL) exists but can only process what it draws itself, not HTML text and buttons, unlike a URP fullscreen pass that processes the whole camera image. So the effect becomes a click-through CSS overlay plus per-answer glitch animation, with one intensity variable set from JS, the same control pattern as `VHSDriver`. **Checked during the build:** on the first effects step, compare the Record Screen (`--vhs` 0.3) and Playback (`--vhs` 1.0) side by side and confirm the difference is visible, as `prd.md > Playback` requires ("Scanlines/effects are visibly stronger here than on the Record Screen").

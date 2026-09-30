@@ -68,6 +68,15 @@ Source: `scope.md > Inspiration & Identity`.
 
 **Avoid:** horror mood and heavy static. "It feels scary instead of nostalgic."
 
+**The room around the TV** (learner addition during the build, made in the final review):
+- The TV stands in a room: a wall with a window, a desk, and props beside the TV, such as an unbranded drink can and a photo frame.
+- The room's layers move opposite to the cursor (parallax), so it feels like a 3D space. The VHS effects stay inside the TV screen.
+- Light from the window falls across the room as its own layer.
+- The photo in the frame is a fixed image chosen by the learner. Uploading your own photo is Later.
+- Room art may be AI-generated (for example with Higgsfield), with no brand logos, trademarks, or watermarks, and it's credited in the README.
+- On touch screens (no cursor) and with the browser's reduced-motion setting, the room stays still (derived from the learner's reduced-motion rule).
+- Why: "I want to bring the atmosphere to life, so it feels more interactive and nicer to look at."
+
 ## Features and Behavior
 
 ### Tape Shelf
@@ -212,6 +221,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - **Closing the app mid-timer records nothing; the tape stays READY and replays from the start** — learner's addition.
 - **A locked tape played early and interrupted returns to locked** — "its return date still hasn't arrived."
 - **Two typefaces, color = status, effects carry meaning** — see `Look and Feel`.
+- **A room around the TV with cursor parallax and window light, built in the final review; a fixed photo in the frame for now** — see `Look and Feel`.
 
 **Assumptions (not learner decisions yet):**
 - None remaining.
@@ -226,6 +236,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - Replay of completed tapes without timer.
 - Tapes persist between visits.
 - The Look and Feel above: CRT frame, scanlines varying by screen, two typefaces, status colors.
+- The room around the TV (built in the final review): a layered room with cursor parallax, window light, and props, with a fixed photo in the frame.
 
 ## Deferred From the POC
 - **Archiving and deleting tapes** — the learner moved these to Later; the demo doesn't need them.
@@ -240,6 +251,7 @@ From `scope.md > Later` and this interview:
 - A welcome message/intro when a tape starts playing.
 - VHS mechanism sound effects.
 - Archive and delete tapes.
+- Uploading your own photo into the frame beside the TV, and adjusting how it sits in the frame (learner decision during the build).
 
 ## Non-Goals
 - **Horror mood or heavy static** — Pause Tape should feel nostalgic, not scary.
