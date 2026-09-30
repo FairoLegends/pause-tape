@@ -82,3 +82,5 @@ Reflection: not started
 Activity mode: not started
 
 ## Revisions
+
+- The ● REC, ■ STOP, and ▶ symbols are drawn as small CSS shapes instead of typed characters — VT323 has no glyphs for ●, ■, or ▶ (checked in the font's character map), so typed symbols would fall back to a different font on each computer.
