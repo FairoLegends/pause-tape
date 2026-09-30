@@ -9,7 +9,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
 
 ## Slices
 
-- [ ] **1. You can record a tape and see it on the shelf, even after closing the app**
+- [x] **1. You can record a tape and see it on the shelf, even after closing the app**
   Becomes usable: The app opens inside the CRT frame on the Tape Shelf, in VT323 with the status colors. With no tapes it shows the blank "Record your first tape" tape and ● REC. ● REC opens the Record Screen: the ● REC camcorder clock, the tape label (project name, return date from today), and the four questions on one screen. ■ STOP with a missing project name, return date, or first step marks those fields red and shows "TAPE INCOMPLETE" without clearing anything. ■ STOP with all three saves the tape to localStorage and shows "TAPE SAVED". Back on the shelf, each tape shows its project name, VCR date, and state: gray "N DAYS" if locked, green "READY" if due today or earlier, sorted READY first, then locked nearest first. Tapes are still there after closing and reopening the page.
   Why now: Opening the app, recording a tape, and seeing it on the shelf is the "pause" half of the kernel. It also sets up the whole project: the local server, VT323 font and license, file structure, CSS variables, screen switching, and the data model every later slice uses. Date handling in local time is the riskiest logic in the app, because a UTC slip would make a tape due today show as locked in WIB before 07:00, so it's verified first.
   PRD ref: `prd.md > The Core Journey` (steps 1–5), `prd.md > Tape Shelf`, `prd.md > Recording a Tape`, `prd.md > States and Boundaries`
