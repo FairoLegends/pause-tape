@@ -1,0 +1,250 @@
+---
+doc: prd
+status: approved
+---
+
+# Pause Tape — Product Requirements
+
+A VHS-styled app for pausing a side project cleanly: record a "tape" to your future self when you stop, and play it back when you return so you know exactly what to do next. For anyone with a side project they've had to put on hold; the first real user is the learner, pausing **NO SIGNAL** until 10 January 2027.
+Source: `scope.md > The Unique Kernel`, `scope.md > Who It's For`.
+
+App interface language: English (`scope.md > Inspiration & Identity`).
+
+## The Core Journey
+Source: `scope.md > The Core Loop`, `scope.md > What "Working" Looks Like`.
+
+1. **Open the app.** The whole app sits inside a CRT TV frame with scanlines. The first thing visible is the **Tape Shelf**.
+2. **First use:** the shelf holds one blank tape reading **"Record your first tape"**, plus the **● REC** button.
+3. **Press ● REC.** The **Record Screen** opens: a camcorder-viewfinder look with a **● REC** indicator and a running timer at the top. On one screen: the tape label (project name, return date) and the four message questions.
+4. **Press ■ STOP.** If the required fields are filled in, the tape is saved and a short **"TAPE SAVED"** screen appears with an **"Add to calendar (.ics)"** button.
+5. **Back to the shelf.** The new tape appears. If its return date is in the future, it's locked with a countdown. If the return date is today, it glows **READY**.
+6. **Later, on or after the return date** (brought back by the calendar reminder), open the app and see the tape on the shelf showing **READY**.
+7. **Select the tape and press ▶.** A brief blue VCR screen appears, then the **Playback Screen**: the answers appear one by one with a short VHS glitch, each staying on screen. A **▶ PLAY** counter runs in the corner. **▶▶** skips the rest of the playback.
+8. **The first step appears last**, immediately followed by a **10-minute timer**.
+9. **Press "I'm back on it."** A short result screen shows e.g. **"BACK ON IT · 4 MIN"** (minutes counted from pressing ▶).
+10. **Back to the shelf.** The tape stays there, its label now showing the minutes. It can be replayed to re-read the note.
+
+**Success:** the learner returns to a paused project, plays the tape, sees the first step, and starts working within minutes. The shelf keeps proof of how fast they got going again.
+
+## Screens and Layout
+All screens live inside the same CRT TV frame.
+
+- **Tape Shelf** (home): the rack of tapes plus the **● REC** button. Each tape's label shows the project name and return date, plus a state (see `Features and Behavior > Tape Shelf`).
+- **Record Screen**: camcorder viewfinder with **● REC** and a running timer at the top. Label fields (project name, return date) and the four message questions on one screen. **■ STOP** saves.
+- **Tape Saved Screen**: brief "TAPE SAVED" confirmation with the **"Add to calendar (.ics)"** button, then back to the shelf.
+- **Early Play Confirmation**: shown when pressing ▶ on a locked tape.
+- **Blue VCR Screen**: a brief transition when a tape is inserted/played.
+- **Playback Screen**: the answers appear one by one, with **▶ PLAY** counter in a corner, **▶▶** skip, then the first step and the 10-minute timer with the **"I'm back on it"** button.
+- **Back On It Screen**: brief result, e.g. "BACK ON IT · 4 MIN", then back to the shelf.
+
+"One screen for everything" in recording was chosen deliberately: "six separate steps feel slow, both in use and in the demo video."
+
+## Look and Feel
+Source: `scope.md > Inspiration & Identity`.
+
+**Overall:** like an old CRT TV and VCR from before smartphones; watching an old recording of yourself, not filling out a form. Connected to NO SIGNAL's visual world but **nostalgic, not scary**.
+
+**Typography (two faces, each with a job):**
+- Blocky VCR on-screen-display font for labels, buttons, and indicators: ● REC, ▶ PLAY, READY, countdowns, tape labels. The app should feel like an old TV the moment it opens.
+- Clean monospace for the learner's own answers, so the message is quick to read and understand on return.
+
+**Color, where every color means something:**
+- Base: blue-black, like CRT glass. Text: faded white.
+- **Red:** only for ● REC (recording).
+- **Green:** READY and ▶ PLAY (ready to play).
+- **Dim gray:** locked tapes (not yet time).
+- **VCR blue screen:** when a tape is inserted or played, and for empty answers ("NO SIGNAL"). Ties to the game's name.
+- Overtime on the timer uses a distinct color (see `Features and Behavior > First Step and Timer`).
+
+**Effects carry meaning, not decoration** (a principle taken from NO SIGNAL, where VHS effects intensify as danger approaches):
+- Scanlines are **thin** while recording, so typing is comfortable.
+- Scanlines and effects are **strongest** while a tape plays.
+- A short VHS glitch accompanies each answer appearing during playback.
+
+**References from NO SIGNAL:**
+- Camcorder viewfinder with timestamp and REC indicator → the Record Screen.
+- The hub's tape-player TV for "Recovered Tapes" (recordings from a previous crew) → the Playback Screen. Here, the tape is a message from yourself.
+- The hub's Archive Terminal (CRT screen) → the Tape Shelf as a project archive.
+
+**Avoid:** horror mood and heavy static. "It feels scary instead of nostalgic."
+
+## Features and Behavior
+
+### Tape Shelf
+Source: `scope.md > The Core Loop`, `scope.md > The POC Boundary`.
+
+The home screen. Shows every saved tape and the ● REC button.
+
+Tape states, readable at a glance by color:
+- **Locked** (return date in the future): dim gray, shows a countdown in days remaining (e.g. "102 DAYS").
+- **READY** (return date is today or has passed, not yet played to completion): glows green with "READY".
+- **Back on it** (minutes already recorded): label shows the minutes, e.g. "BACK ON IT · 4 MIN". Replayable.
+
+**Shelf order:** READY tapes first, then locked tapes with the nearest return date first, then completed tapes last.
+
+- As the learner, I want to see all my paused projects as tapes so that when I return I immediately see where to start.
+  - [ ] Opening the app shows the Tape Shelf first, inside the CRT frame with scanlines.
+  - [ ] With no tapes, the shelf shows one blank tape reading "Record your first tape" and the ● REC button.
+  - [ ] Each tape label shows the project name and return date.
+  - [ ] A tape with a future return date appears dim gray with a countdown in days.
+  - [ ] A tape whose return date is today or earlier appears green with "READY".
+  - [ ] A tape that has been completed shows its recorded minutes on the label.
+  - [ ] Tapes appear in order: READY first, then locked (nearest return date first), then completed last.
+  - [ ] Tapes are still on the shelf after closing and reopening the app.
+
+### Recording a Tape
+Source: `scope.md > The Core Loop` (Pause).
+
+Pressing ● REC opens the Record Screen. Everything is on one screen:
+- **Tape label:** project name, return date.
+- **The message (four questions):** where I stopped; the first step when I come back (small, about 10 minutes); what I'm still unsure about; why this project matters to me.
+
+A ● REC indicator with a running timer sits at the top, like a camcorder recording. Pressing **■ STOP** saves the tape.
+
+**Required fields:** project name, return date, and first step, "because without them the tape can't work: no label on the shelf, no reminder, and no step for the timer." The other three answers are optional: "I don't want to be forced to fill in something that doesn't exist, like when I'm not unsure about anything."
+
+**Return date:** date choices start from today; past dates can't be picked. Today is allowed.
+
+- As the learner, I want to record where I stopped and my first step in one go so that pausing is quick.
+  - [ ] Pressing ● REC opens the Record Screen with the ● REC indicator and a running timer at the top.
+  - [ ] Project name, return date, and all four questions are on a single screen.
+  - [ ] Past dates can't be selected; today can.
+  - [ ] Pressing ■ STOP with project name, return date, and first step filled in saves the tape and shows "TAPE SAVED".
+  - [ ] Pressing ■ STOP with any of those three empty does not save; the empty required fields are marked red with "TAPE INCOMPLETE", and everything already typed is still there.
+  - [ ] A tape can be saved with any of the three optional answers left empty.
+
+### Calendar Reminder (.ics)
+Source: `scope.md > The Core Loop`, `scope.md > The POC Boundary`.
+
+The "TAPE SAVED" screen offers **"Add to calendar (.ics)"**, which provides a calendar file for the return date so the reminder lands in the phone or laptop calendar.
+
+The event is **all-day** on the return date, named after the project. Its **description contains the first step**, and it has a **morning alarm at 08:00 WIB** on the return date, so the reminder itself says what to do.
+
+- As the learner, I want a calendar reminder on my return date so that I actually come back.
+  - [ ] Pressing "Add to calendar (.ics)" produces an `.ics` file.
+  - [ ] Opening the file adds an all-day event on the tape's return date to a calendar app, named after the project.
+  - [ ] The event's description contains the tape's first step.
+  - [ ] The event has an alarm at 08:00 WIB on the return date.
+  - [ ] Leaving the "TAPE SAVED" screen returns to the shelf with the new tape shown.
+
+### Early Play
+Source: `scope.md > The Core Loop` ("so it still feels like a message from the past, but doesn't block me if I can come back sooner").
+
+VCR-style confirmation: **"TAPE DUE 10 JAN 2027. PLAY EARLY?"** (with the tape's own date) and two buttons, **▶ PLAY** and **CANCEL**.
+
+- [ ] Pressing ▶ on a locked tape shows "TAPE DUE [date]. PLAY EARLY?" with ▶ PLAY and CANCEL.
+- [ ] ▶ PLAY plays the tape normally (full Playback, first step, timer, minutes).
+- [ ] CANCEL returns to the shelf; the tape stays locked.
+
+### Playback
+Source: `scope.md > The Core Loop` (Rewind), `scope.md > What "Working" Looks Like`.
+
+Pressing ▶ shows a brief blue VCR screen, then the answers appear **one by one**, each with a short VHS glitch, and each stays on screen. **The first step appears last.** A **▶ PLAY** counter runs in a corner (the pair to ● REC). **▶▶** skips the rest of the playback straight to the first step.
+
+Why one by one: "so it feels like watching an old recording of myself, not reading a boring form." Why ▶▶: "I don't want to be forced to wait if I already remember." Why the first step last: "it's the most important part. As soon as it appears, the timer starts and I start working, not staring."
+
+**Empty optional answers** briefly appear as a blue "NO SIGNAL" screen in their place.
+
+- As the learner, I want my note played back like an old tape so that it feels like a message from my past self.
+  - [ ] Pressing ▶ on a READY tape shows a brief blue VCR screen, then the Playback Screen.
+  - [ ] Answers appear one at a time with a glitch effect; earlier answers stay visible.
+  - [ ] The ▶ PLAY counter runs in a corner during playback.
+  - [ ] An empty optional answer shows briefly as a blue "NO SIGNAL" screen.
+  - [ ] The first step is the last thing to appear.
+  - [ ] Pressing ▶▶ skips straight to showing everything, including the first step, and the timer starts.
+  - [ ] Scanlines/effects are visibly stronger here than on the Record Screen.
+
+### First Step and Timer
+Source: `scope.md > The Unique Kernel`.
+
+As soon as the first step appears, a **10-minute countdown** starts with the **"I'm back on it"** button.
+
+If the timer reaches zero before the button is pressed, it keeps counting **overtime** (e.g. "+01:23") in a different color, and the button still works. "The 10-minute timer is a nudge to start, not a punishment. If I needed 13 minutes, that still means I made it back, so the number has to be honest."
+
+Pressing **"I'm back on it"** shows a brief result screen, e.g. **"BACK ON IT · 4 MIN"**. Minutes are counted **from pressing ▶**. Then it returns to the shelf.
+
+- As the learner, I want a 10-minute first step with a timer so that I start working right away.
+  - [ ] The 10-minute countdown starts the moment the first step appears.
+  - [ ] "I'm back on it" is visible alongside the timer.
+  - [ ] After 10 minutes, the timer shows overtime (e.g. "+01:23") in a different color and the button still works.
+  - [ ] Pressing "I'm back on it" shows "BACK ON IT · N MIN", where N is minutes since ▶ was pressed (including any overtime).
+  - [ ] Back on the shelf, that tape's label shows the minutes.
+  - [ ] If the app is closed while the timer is running, no minutes are recorded; on reopening, the tape is still READY and plays again from the start.
+
+### Replaying a Completed Tape
+Source: learner decision during the PRD interview.
+
+A tape that already has minutes can be played again to re-read the note, "if I forget again." Replaying is for remembering, not returning from a pause.
+
+- [ ] Replaying a completed tape plays the answers as in Playback.
+- [ ] No timer and no "I'm back on it" button appear on replay.
+- [ ] The minutes on the label never change after the first time.
+- [ ] To pause the same project again, the learner records a new tape.
+
+## States and Boundaries
+- **First use / empty shelf** — one blank tape reading "Record your first tape" plus ● REC.
+- **Incomplete tape** — ■ STOP with a missing project name, return date, or first step: not saved; required fields marked red with "TAPE INCOMPLETE"; typed answers kept.
+- **Empty optional answer** — during playback, shown briefly as a blue "NO SIGNAL" screen.
+- **Locked tape** — dim gray with a countdown in days; playable early after the "PLAY EARLY?" confirmation.
+- **Return date today** — tape is READY immediately (needed for the demo).
+- **Timer overtime** — keeps counting as "+mm:ss" in a different color; button still works.
+- **App closed mid-playback or mid-timer** — nothing is recorded; the tape stays READY without minutes and plays again from the start. A locked tape played early returns to locked.
+- **Completed tape** — label shows minutes; replays without timer/button; minutes never overwritten.
+- **Persistence** — tapes, including their answers and recorded minutes, remain after closing and reopening the app.
+
+## Product Decisions
+- **Shelf is the home screen** — on return, "I immediately see the tape I recorded before, so I know what to do."
+- **Recording is one screen, not steps** — six separate steps feel slow in use and in the demo video.
+- **● REC / ■ STOP / ▶ PLAY / ▶▶ vocabulary** — recording and playing should feel like a camcorder and VCR.
+- **Only project name, return date, and first step are required** — without them the tape can't work; the rest shouldn't be forced.
+- **Dates start from today; today is allowed and immediately READY** — no past dates, and the demo needs a tape due today.
+- **Locked tapes can be played early after confirmation** — still feels like a message from the past, without blocking an early return.
+- **Answers appear one by one with ▶▶ to skip** — feels like watching a recording, without forcing a wait.
+- **First step appears last, then the timer starts immediately** — it's the most important part; it turns into action right away.
+- **Minutes are counted from pressing ▶** — learner's choice.
+- **Overtime keeps counting, honestly** — the timer is a nudge, not a punishment.
+- **Completed tapes stay on the shelf with their minutes, never overwritten** — they're proof of actually coming back; replays are for remembering.
+- **Pausing the same project again means a new tape** — each tape is one pause-and-return.
+- **Countdown in days** — learner confirmed.
+- **Shelf order: READY first, then locked by nearest date, completed last** — "what can be played right away has to be the first thing I see when I come back, so I don't have to hunt for it among the locked tapes. Completed tapes go last because they're just proof, not something I have to work on now."
+- **Calendar event is all-day, its description holds the first step, and it has a morning alarm at 08:00 WIB** — "when the reminder pops up on my phone, I already know my first step before even opening the app. So when the return day comes, I know what to do right away, not staring."
+- **Early-play wording is VCR-style: "TAPE DUE [date]. PLAY EARLY?" with ▶ PLAY / CANCEL** — keeps the VCR language.
+- **Closing the app mid-timer records nothing; the tape stays READY and replays from the start** — learner's addition.
+- **A locked tape played early and interrupted returns to locked** — "its return date still hasn't arrived."
+- **Two typefaces, color = status, effects carry meaning** — see `Look and Feel`.
+
+**Assumptions (not learner decisions yet):**
+- None remaining.
+
+## What We're Building
+- Tape Shelf with empty state, locked/READY/completed tape states, shelf order, and ● REC.
+- Record Screen: one-screen form, required-field validation ("TAPE INCOMPLETE"), date picker starting from today, ■ STOP to save.
+- Tape Saved Screen with "Add to calendar (.ics)": all-day event, first step in the description, morning alarm at 08:00 WIB.
+- Early Play confirmation ("TAPE DUE [date]. PLAY EARLY?").
+- Playback: blue VCR screen, one-by-one answers with glitch, ▶ PLAY counter, ▶▶ skip, "NO SIGNAL" for empty answers.
+- First step + 10-minute timer with overtime + "I'm back on it" + "BACK ON IT · N MIN".
+- Replay of completed tapes without timer.
+- Tapes persist between visits.
+- The Look and Feel above: CRT frame, scanlines varying by screen, two typefaces, status colors.
+
+## Deferred From the POC
+- **Archiving and deleting tapes** — the learner moved these to Later; the demo doesn't need them.
+- **Editing a saved tape** — not discussed; not needed for the demo. Record a new tape instead.
+- **Accounts and syncing across devices** — tapes live where the app is used; the demo doesn't need more.
+- **In-app notifications** — the `.ics` calendar reminder covers "come back on the date."
+
+## Possible Later Enhancements
+From `scope.md > Later` and this interview:
+- Voice recording of the note.
+- Longer free-form extra notes.
+- A welcome message/intro when a tape starts playing.
+- VHS mechanism sound effects.
+- Archive and delete tapes.
+
+## Non-Goals
+- **Horror mood or heavy static** — Pause Tape should feel nostalgic, not scary.
+- **A full project manager** (tasks, issues, progress tracking) — the tape holds one message and one first step; the learner already has a GDD and `issue.md` for the rest.
+- **Being forced to fill everything in** — only what the tape needs to work is required.
+
+## Open Questions
+- None blocking `4-spec`.

@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pause Tape: Technical Spec (approved)</title>
+<!-- Companion view of devpost/spec.md. The Markdown file is canonical. No network needed. -->
+<style>
+  :root {
+    --glass: #070b14;
+    --panel: #0f1622;
+    --panel-2: #151f2e;
+    --ink: #d9dee8;
+    --muted: #8793a3;
+    --rec: #ff3b3b;
+    --ready: #62ff8f;
+    --locked: #6b7280;
+    --vcr: #1d2fb8;
+    --overtime: #ffb020;
+    --line: #223044;
+    --osd: "Consolas", "Lucida Console", ui-monospace, monospace;
+    --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", "Consolas", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--glass); color: var(--ink); font: 16px/1.6 var(--sans); }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.03) 0 1px, transparent 1px 3px);
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 24px 96px; }
+  code, pre { font-family: var(--mono); font-size: .92em; color: #eef2f7; }
+  a { color: #9fb4ff; }
+
+  header { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 36px; }
+  .osd { font: 700 13px/1 var(--osd); letter-spacing: .14em; text-transform: uppercase; display: flex; gap: 20px; flex-wrap: wrap; color: var(--ready); }
+  .osd .a { color: var(--overtime); }
+  h1 { font: 700 clamp(38px, 6.5vw, 64px)/1.05 var(--osd); margin: 18px 0 12px; letter-spacing: .02em; }
+  .tagline { color: var(--muted); font-size: 18px; max-width: 70ch; margin: 0; }
+
+  section { margin: 52px 0; }
+  h2 { font: 700 13px/1 var(--osd); letter-spacing: .16em; text-transform: uppercase; color: var(--overtime); margin: 0 0 16px; }
+  h3 { font: 700 17px var(--osd); letter-spacing: .04em; margin: 0 0 6px; }
+  .note { color: var(--muted); font-size: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); padding: 18px 20px; }
+  .ref { font: 12px var(--mono); color: var(--muted); }
+  .ref b { color: #b9c6ff; font-weight: 600; }
+
+  /* Unity ↔ Web */
+  .map { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 860px) { .map { grid-template-columns: 1fr 1fr; } }
+  .map .card { padding: 16px; }
+  .map .u { font: 12px var(--mono); color: var(--muted); }
+  .map .w { font: 700 20px var(--osd); margin: 4px 0 8px; color: var(--ready); }
+  .map p { margin: 0; font-size: 14px; }
+
+  /* Architecture diagram */
+  .diagram { background: var(--panel); border: 1px solid var(--line); padding: 18px; overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; min-width: 880px; height: auto; }
+  .diagram text { font-family: var(--mono); }
+  .node { cursor: pointer; }
+  .node:hover rect, .node:focus rect, .node.on rect { stroke: var(--overtime); stroke-width: 2; }
+  .node:focus { outline: none; }
+  .comp { margin-top: 12px; min-height: 120px; }
+  .comp h3 { color: var(--ready); }
+  .comp p { margin: 6px 0; }
+
+  /* Journey stepper */
+  .stepper { background: var(--panel); border: 1px solid var(--line); }
+  .dots { display: flex; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .dots button { flex: 1; min-width: 56px; background: none; border: 0; border-right: 1px solid var(--line); color: var(--muted); font: 700 13px var(--osd); padding: 12px 6px; cursor: pointer; }
+  .dots button:last-child { border-right: 0; }
+  .dots button[aria-selected="true"] { background: var(--vcr); color: #fff; }
+  .dots button:focus-visible { outline: 2px solid var(--overtime); outline-offset: -2px; }
+  .stage { padding: 22px 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; min-height: 250px; }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+  .stage h4 { font: 700 11px var(--osd); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .stage .you { font-size: 18px; }
+  .files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .files span { font: 12px var(--mono); background: var(--panel-2); border: 1px solid var(--line); padding: 3px 8px; }
+  .files span.store { border-color: var(--ready); color: var(--ready); }
+  .nav { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding: 12px 18px; }
+  .nav button { background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); font: 700 12px var(--osd); letter-spacing: .1em; padding: 8px 14px; cursor: pointer; }
+  .nav button:disabled { opacity: .35; cursor: default; }
+  .nav button:focus-visible { outline: 2px solid var(--overtime); }
+
+  /* VHS preview */
+  .vhsdemo { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 760px) { .vhsdemo { grid-template-columns: 1fr; } }
+  .tube {
+    --vhs: .3;
+    position: relative; aspect-ratio: 4 / 3; border-radius: 26px / 22px; overflow: hidden;
+    background: radial-gradient(ellipse at center, #0e1830 0%, #060a13 75%);
+    border: 14px solid #1a1d22; box-shadow: inset 0 0 60px rgba(0,0,0,.8), 0 0 0 2px #2a2e35;
+    padding: 26px 28px; font-family: var(--osd);
+  }
+  .tube .top { display: flex; justify-content: space-between; font-weight: 700; letter-spacing: .1em; font-size: 14px; }
+  .tube .top .rec { color: var(--rec); }
+  .tube .top .play { color: var(--ready); }
+  .tube .ans { font-family: var(--mono); margin-top: 22px; font-size: 15px; line-height: 1.5; }
+  .tube .ans .q { font: 700 11px var(--osd); letter-spacing: .12em; color: var(--muted); display: block; }
+  .tube .first { margin-top: 16px; border-top: 1px dashed #33405a; padding-top: 10px; }
+  .tube .timer { font: 700 22px var(--osd); color: var(--ink); margin-top: 6px; }
+  .tube::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,.55) 0 1px, transparent 1px 3px);
+    opacity: calc(var(--vhs) * .9);
+  }
+  .tube::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%);
+    opacity: calc(.4 + var(--vhs) * .6);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tube { animation: flicker 6s ease-in-out infinite; }
+    @keyframes flicker { 0%,100% { filter: brightness(1); } 50% { filter: brightness(calc(1 - var(--vhs) * .06)); } }
+    .glitch { animation: glitch .3s steps(3) 1; }
+    @keyframes glitch {
+      0% { transform: translateX(4px); text-shadow: -2px 0 rgba(255,59,59,.8), 2px 0 rgba(80,120,255,.8); }
+      60% { transform: translateX(-3px); text-shadow: 2px 0 rgba(255,59,59,.8), -2px 0 rgba(80,120,255,.8); }
+      100% { transform: none; text-shadow: none; }
+    }
+  }
+  .levels { display: flex; flex-direction: column; gap: 8px; }
+  .levels button {
+    text-align: left; background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+    padding: 12px 14px; cursor: pointer; font: 14px var(--sans);
+  }
+  .levels button b { font: 700 13px var(--osd); letter-spacing: .08em; display: block; }
+  .levels button[aria-pressed="true"] { border-color: var(--ready); }
+  .levels button[aria-pressed="true"] b { color: var(--ready); }
+  .levels button:focus-visible { outline: 2px solid var(--overtime); }
+  .levels .gl { border-style: dashed; }
+
+  /* Data */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  pre.block { background: var(--panel); border: 1px solid var(--line); padding: 16px 18px; margin: 0; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  pre .k { color: #9fb4ff; } pre .c { color: var(--muted); } pre .h { color: var(--ready); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 700 11px var(--osd); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  td.mem { color: var(--overtime); } td.ls { color: var(--ready); }
+
+  /* File tree */
+  .tree { background: var(--panel); border: 1px solid var(--line); padding: 14px 0; font: 14px/1.9 var(--mono); }
+  .tree button { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--ink); font: inherit; padding: 0 18px; cursor: pointer; white-space: pre; }
+  .tree button:hover, .tree button[aria-expanded="true"] { background: var(--panel-2); color: var(--ready); }
+  .tree button:focus-visible { outline: 2px solid var(--overtime); outline-offset: -2px; }
+  .tree .dir { color: var(--muted); padding: 0 18px; white-space: pre; }
+  .tree .info { display: block; margin: 2px 18px 8px 60px; padding: 8px 12px; border-left: 2px solid var(--ready); font: 14px/1.5 var(--sans); color: var(--ink); white-space: normal; }
+  .tree .info[hidden] { display: none; }
+
+  /* Details */
+  details { background: var(--panel); border: 1px solid var(--line); margin-bottom: 10px; }
+  summary { cursor: pointer; padding: 15px 20px; list-style: none; display: flex; justify-content: space-between; align-items: center; font: 700 14px var(--osd); letter-spacing: .06em; text-transform: uppercase; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "▶"; font-size: 11px; color: var(--muted); transition: transform .15s; }
+  details[open] summary::after { transform: rotate(90deg); }
+  summary:focus-visible { outline: 2px solid var(--overtime); outline-offset: -2px; }
+  details ul { margin: 0; padding: 0 24px 18px 42px; }
+  details li { margin: 7px 0; }
+  details .body { padding: 0 20px 18px; }
+  .pill { font: 700 11px var(--osd); letter-spacing: .1em; padding: 4px 8px; margin-right: 12px; color: var(--glass); }
+  .p-you { background: var(--ready); } .p-ai { background: #8fb0ff; } .p-q { background: var(--overtime); } .p-risk { background: var(--rec); } .p-simp { background: var(--ink); }
+
+  footer { margin-top: 64px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font: 13px var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="osd"><span>▶ PLAY</span><span class="a">Spec · Approved</span><span>SP 0:00:00</span></div>
+  <h1>PAUSE TAPE<br>TECHNICAL SPEC</h1>
+  <p class="tagline">The blueprint for how Pause Tape is built: one static web page (HTML + CSS + JS, no framework), tapes stored in the browser's localStorage, a <code>.ics</code> file made in the browser, VHS effects as a CSS layer driven by one <code>--vhs</code> number, hosted free on GitHub Pages.</p>
+</header>
+
+<section>
+  <h2>How This Works: Unity → Web</h2>
+  <div class="map">
+    <div class="card"><div class="u">Unity: Scene + Hierarchy</div><div class="w">HTML</div><p><code>index.html</code> holds all 7 screens as nested elements. Switching screens = <code>SetActive</code>.</p></div>
+    <div class="card"><div class="u">Unity: Materials / UI look</div><div class="w">CSS</div><p>Colors, the two fonts, the CRT frame, and the VHS layer.</p></div>
+    <div class="card"><div class="u">Unity: MonoBehaviour scripts</div><div class="w">JS</div><p>Clicks (<code>onClick</code>), timers (<code>Update</code>), saving, building the calendar file.</p></div>
+    <div class="card"><div class="u">Unity: PlayerPrefs + JsonUtility</div><div class="w">localStorage</div><p>The tape list saved as JSON text in this browser. No server, no accounts.</p></div>
+  </div>
+  <p class="note" style="margin-top:14px">Why this shape: GitHub Pages only serves files, and everything Pause Tape needs can happen inside the browser. The files you write are exactly the files that go online.</p>
+</section>
+
+<section>
+  <h2>Architecture: Click a Piece</h2>
+  <div class="diagram" role="group" aria-label="Architecture diagram. GitHub Pages or a local server sends the files to the browser. Inside the browser, index.html holds the screens, CSS styles them, and JS scripts run the app. store.js reads and writes localStorage. ics.js creates a .ics download that opens in a calendar app.">
+    <svg viewBox="0 0 940 380" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8793a3"/></marker>
+        <marker id="arG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#62ff8f"/></marker>
+      </defs>
+
+      <!-- Hosting -->
+      <g class="node" tabindex="0" data-c="host">
+        <rect x="20" y="150" width="150" height="80" fill="#151f2e" stroke="#223044"/>
+        <text x="36" y="180" fill="#d9dee8" font-size="14" font-weight="700">GitHub Pages</text>
+        <text x="36" y="200" fill="#8793a3" font-size="11">or local server</text>
+        <text x="36" y="216" fill="#8793a3" font-size="11">(while building)</text>
+      </g>
+      <line x1="170" y1="190" x2="216" y2="190" stroke="#8793a3" stroke-width="1.5" marker-end="url(#ar)"/>
+      <text x="172" y="180" fill="#8793a3" font-size="10">files</text>
+
+      <!-- Browser -->
+      <rect x="220" y="20" width="480" height="340" fill="none" stroke="#33405a" stroke-dasharray="5 4"/>
+      <text x="234" y="42" fill="#8793a3" font-size="11" letter-spacing="2">BROWSER (the whole app runs here)</text>
+
+      <g class="node" tabindex="0" data-c="html">
+        <rect x="240" y="58" width="200" height="62" fill="#151f2e" stroke="#223044"/>
+        <text x="256" y="84" fill="#d9dee8" font-size="14" font-weight="700">index.html</text>
+        <text x="256" y="104" fill="#8793a3" font-size="11">7 screens · CRT frame</text>
+      </g>
+      <g class="node" tabindex="0" data-c="css">
+        <rect x="470" y="58" width="210" height="62" fill="#151f2e" stroke="#223044"/>
+        <text x="486" y="84" fill="#d9dee8" font-size="14" font-weight="700">base.css + vhs.css</text>
+        <text x="486" y="104" fill="#8793a3" font-size="11">look · scanlines · glitch</text>
+      </g>
+
+      <g class="node" tabindex="0" data-c="app">
+        <rect x="240" y="146" width="200" height="56" fill="#151f2e" stroke="#62ff8f"/>
+        <text x="256" y="172" fill="#62ff8f" font-size="14" font-weight="700">app.js</text>
+        <text x="256" y="190" fill="#8793a3" font-size="11">screen switch · sets --vhs</text>
+      </g>
+      <line x1="440" y1="170" x2="470" y2="100" stroke="#62ff8f" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#arG)"/>
+      <text x="446" y="146" fill="#62ff8f" font-size="10">--vhs</text>
+
+      <g class="node" tabindex="0" data-c="screens">
+        <rect x="240" y="226" width="440" height="56" fill="#151f2e" stroke="#223044"/>
+        <text x="256" y="250" fill="#d9dee8" font-size="13" font-weight="700">shelf.js · record.js · playback.js</text>
+        <text x="256" y="270" fill="#8793a3" font-size="11">one script per screen group · uses tapes.js for dates, state, order</text>
+      </g>
+      <line x1="340" y1="202" x2="340" y2="224" stroke="#8793a3" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <g class="node" tabindex="0" data-c="store">
+        <rect x="240" y="300" width="200" height="46" fill="#151f2e" stroke="#223044"/>
+        <text x="256" y="328" fill="#d9dee8" font-size="14" font-weight="700">store.js</text>
+      </g>
+      <line x1="340" y1="282" x2="340" y2="298" stroke="#8793a3" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <g class="node" tabindex="0" data-c="ics">
+        <rect x="470" y="300" width="210" height="46" fill="#151f2e" stroke="#223044"/>
+        <text x="486" y="328" fill="#d9dee8" font-size="14" font-weight="700">ics.js</text>
+      </g>
+      <line x1="575" y1="282" x2="575" y2="298" stroke="#8793a3" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <!-- Outside browser -->
+      <g class="node" tabindex="0" data-c="ls">
+        <rect x="740" y="210" width="180" height="70" fill="#0f1622" stroke="#62ff8f"/>
+        <text x="756" y="238" fill="#62ff8f" font-size="14" font-weight="700">localStorage</text>
+        <text x="756" y="258" fill="#8793a3" font-size="11">pausetape.tapes.v1</text>
+      </g>
+      <path d="M440,323 L720,323 L720,262 L738,262" stroke="#62ff8f" stroke-width="1.5" fill="none" marker-end="url(#arG)"/>
+      <text x="726" y="300" fill="#62ff8f" font-size="10">save / load</text>
+
+      <g class="node" tabindex="0" data-c="cal">
+        <rect x="740" y="60" width="180" height="84" fill="#0f1622" stroke="#ffb020"/>
+        <text x="756" y="88" fill="#ffb020" font-size="14" font-weight="700">Calendar app</text>
+        <text x="756" y="108" fill="#8793a3" font-size="11">Outlook (demo)</text>
+        <text x="756" y="124" fill="#8793a3" font-size="11">Android (tested)</text>
+      </g>
+      <path d="M680,315 L710,315 L710,102 L738,102" stroke="#ffb020" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+      <text x="716" y="180" fill="#ffb020" font-size="10">.ics download</text>
+    </svg>
+  </div>
+  <div class="card comp" id="comp" aria-live="polite">
+    <h3>Pick a piece of the diagram</h3>
+    <p class="note">Each piece shows what it does, which file it is, and which PRD heading it serves.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The Core Journey Through the System</h2>
+  <div class="stepper">
+    <div class="dots" role="tablist" aria-label="Journey steps" id="dots"></div>
+    <div class="stage" role="tabpanel" id="stage" aria-live="polite"></div>
+    <div class="nav"><button id="prev">◀◀ PREV</button><button id="next">NEXT ▶▶</button></div>
+  </div>
+  <p class="note">Nothing is saved between pressing ▶ and pressing "I'm back on it". That's why closing the app mid-timer records nothing, and a locked tape played early goes back to locked, with no extra code.</p>
+</section>
+
+<section>
+  <h2>The VHS Layer: Your VHSDriver, in CSS</h2>
+  <div class="vhsdemo">
+    <div class="tube" id="tube">
+      <div class="top"><span id="ind" class="rec">● REC 00:00:15</span><span>SP</span></div>
+      <div class="ans" id="ans">
+        <span class="q">WHERE I STOPPED</span>
+        <span id="a1">Sample text: the last thing I finished before pausing.</span>
+        <div class="first">
+          <span class="q">FIRST STEP (~10 MIN)</span>
+          <span id="a2">Sample text: one small task to start with.</span>
+          <div class="timer" id="tm">10:00</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p style="margin-top:0">One number, <code>--vhs</code>, sets how strong the scanlines, vignette, and flicker are. <code>app.js</code> changes it per screen, like <code>material.SetFloat("_Intensity", x)</code>. Try the planned values:</p>
+      <div class="levels" id="levels">
+        <button aria-pressed="true" data-v=".3" data-mode="rec"><b>RECORD · --vhs 0.3</b>Thin scanlines so typing stays comfortable.</button>
+        <button aria-pressed="false" data-v=".5" data-mode="shelf"><b>SHELF / RESULTS · --vhs 0.5</b>The TV is on, but calm.</button>
+        <button aria-pressed="false" data-v="1" data-mode="play"><b>PLAYBACK · --vhs 1.0</b>Strongest: watching an old recording.</button>
+        <button class="gl" id="glitchBtn"><b>▶ REPLAY GLITCH</b>The ~300 ms shift + red/blue split each answer gets.</button>
+      </div>
+      <p class="note">This preview follows your rule: with "reduce motion" on in your system, flicker and glitch stay off, and scanlines stay. Hex values and strengths get tuned by eye in the build.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Data Model: What Survives Closing the App</h2>
+  <div class="grid2">
+    <pre class="block"><span class="c">// localStorage key: pausetape.tapes.v1</span>
+[
+  {
+    <span class="k">"id"</span>: "t_1727650000000",
+    <span class="k">"project"</span>: "NO SIGNAL",
+    <span class="k">"returnDate"</span>: "2027-01-10",
+    <span class="k">"stopped"</span>: "…",
+    <span class="k">"firstStep"</span>: "…",
+    <span class="k">"unsure"</span>: "",
+    <span class="k">"why"</span>: "…",
+    <span class="k">"recordedAt"</span>: "2026-09-30T14:02:11.000Z",
+    <span class="k">"backOnItMinutes"</span>: null,  <span class="c">// written once</span>
+    <span class="k">"completedAt"</span>: null
+  }
+]</pre>
+    <div class="card" style="padding:6px 8px">
+      <table>
+        <thead><tr><th>Data</th><th>Lives in</th><th>After closing</th></tr></thead>
+        <tbody>
+          <tr><td>Tape list</td><td class="ls">localStorage</td><td>Still there</td></tr>
+          <tr><td>Locked / READY / completed</td><td>Calculated from date + minutes</td><td>Recalculated on open: a tape turns READY on its day by itself</td></tr>
+          <tr><td>Record form text</td><td class="mem">Memory</td><td>Lost if closed before ■ STOP</td></tr>
+          <tr><td>▶ start time, playback, timer</td><td class="mem">Memory</td><td>Gone, so the tape is unchanged (READY stays READY; early play stays locked)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="note">Dates are compared as local <code>YYYY-MM-DD</code> text from <code>todayLocal()</code>, never UTC, so a tape due today is READY in WIB at any hour.</p>
+</section>
+
+<section>
+  <h2>File Structure: Click a File</h2>
+  <div class="tree" id="tree">
+    <div class="dir">BuildWithAI-Basics/   <span class="note">(repo root, served by GitHub Pages)</span></div>
+    <button data-i="index.html holds all 7 screens as &lt;section data-screen&gt;, the CRT frame, and the VHS overlay element. All paths inside are relative so GitHub Pages works. PRD: Screens and Layout.">├── index.html</button>
+    <div class="dir">├── css/</div>
+    <button data-i="Color and font variables, @font-face for the VCR font, the CRT frame, layout of every screen, cassette shapes and tape-state colors. PRD: Look and Feel, Tape Shelf.">│   ├── base.css</button>
+    <button data-i="The overlay: scanlines, vignette, slow soft flicker, the glitch class, all scaled by --vhs. Reduced-motion rule turns flicker and glitch off, keeps scanlines. PRD: Look and Feel.">│   └── vhs.css</button>
+    <div class="dir">├── js/</div>
+    <button data-i="Entry script. Shows one screen at a time and sets --vhs for it (the VHSDriver). Loads tapes and draws the shelf on start. PRD: Screens and Layout.">│   ├── app.js</button>
+    <button data-i="The only file that touches localStorage. loadTapes() returns an empty list if data is missing or broken; saveTapes() writes the list. PRD: States and Boundaries (Persistence).">│   ├── store.js</button>
+    <button data-i="Pure helpers: todayLocal(), tapeState(), daysUntil(), sortTapes() (READY → locked by nearest date → completed), formatVcrDate(). PRD: Tape Shelf, Early Play.">│   ├── tapes.js</button>
+    <button data-i="Draws cassettes with name, date, and 102 DAYS / READY / BACK ON IT · 4 MIN. Empty state: 'Record your first tape'. Routes presses to playback, early play, or replay. PRD: Tape Shelf.">│   ├── shelf.js</button>
+    <button data-i="One-screen form, date min = today, ● REC clock, ■ STOP validation with red fields + TAPE INCOMPLETE, keeps typed text, saves the tape. PRD: Recording a Tape.">│   ├── record.js</button>
+    <button data-i="Builds the .ics text (all-day, first step in the description, alarm TRIGGER PT8H = 08:00 local) and downloads it via a Blob. PRD: Calendar Reminder (.ics).">│   ├── ics.js</button>
+    <button data-i="Blue VCR screen, one-by-one reveal with glitch, NO SIGNAL for empties, ▶ PLAY counter, ▶▶ skip, 10:00 timer with +mm:ss overtime, I'm back on it, replay mode with no timer. PRD: Playback, First Step and Timer, Replaying a Completed Tape.">│   └── playback.js</button>
+    <div class="dir">├── assets/fonts/</div>
+    <button data-i="VT323, the VCR OSD font, plus its SIL Open Font License text, which allows it in a public repo.">│   ├── VT323-Regular.ttf + OFL.txt</button>
+    <button data-i="What Pause Tape is, how to run it locally, the live link (added in 6-ship), how to reset the shelf for a demo rehearsal, and Known limitations (calendar test findings).">├── README.md</button>
+    <button data-i="Already exists. Keeps devpost/learner-profile.md and .env files out of the public repo.">├── .gitignore</button>
+    <div class="dir">└── devpost/ , .claude/ , .agents/ , agent/   <span class="note">(planning docs and course tooling, untouched)</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>The .ics File</h2>
+  <div class="grid2">
+    <pre class="block">BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Pause Tape//EN
+BEGIN:VEVENT
+UID:t_1727650000000@pause-tape
+DTSTAMP:20260930T070211Z
+<span class="h">DTSTART;VALUE=DATE:20270110</span>
+<span class="h">DTEND;VALUE=DATE:20270111</span>
+SUMMARY:▶ NO SIGNAL — tape ready
+<span class="h">DESCRIPTION:First step: …</span>
+BEGIN:VALARM
+ACTION:DISPLAY
+<span class="h">TRIGGER;RELATED=START:PT8H</span>
+END:VALARM
+END:VEVENT
+END:VCALENDAR</pre>
+    <div class="card">
+      <p><b>All-day:</b> <code>VALUE=DATE</code>, ending the next day.</p>
+      <p><b>First step in the reminder:</b> the <code>DESCRIPTION</code>, so you know what to do before opening the app.</p>
+      <p><b>08:00 WIB alarm:</b> <code>PT8H</code> = 8 hours after the day starts <em>in the device's own time zone</em>. On your devices, that's 08:00 WIB.</p>
+      <p class="note">To test in the build: Outlook on your laptop for the demo (check the event and alarm appear), and your Android phone (Google Calendar often ignores imported alarms). Problems go into the README's Known limitations.</p>
+      <p class="ref">Implements <b>prd.md &gt; Calendar Reminder (.ics)</b></p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Where It Runs</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>While building + recording</h3>
+      <p>On your laptop, served over <code>http://</code> (modules and fonts don't load from a double-clicked file): <code>python -m http.server 8000</code> (Python 3.11) → <code>http://localhost:8000</code>.</p>
+      <p class="note">Reset for a rehearsal: DevTools → Application → Local Storage → delete <code>pausetape.tapes.v1</code>.</p>
+    </div>
+    <div class="card">
+      <h3>For judges (in 6-ship)</h3>
+      <p><b>GitHub Pages</b>, free: Settings → Pages → Deploy from branch → <code>main</code> / <code>(root)</code>. Link: <code>https://&lt;username&gt;.github.io/&lt;repo&gt;/</code>.</p>
+      <p class="note">The demo video and public repo are still required. The link is a bonus.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Decisions, Simplifications, Risks</h2>
+  <details open>
+    <summary><span><span class="pill p-you">YOURS</span>Learner decisions</span></summary>
+    <ul>
+      <li>Learn basic web code, only what Pause Tape uses, explained through Unity/C#.</li>
+      <li>Static site on GitHub Pages so judges can open a link; build and record locally; deploy in <code>6-ship</code>.</li>
+      <li>Everything in the browser: localStorage (like PlayerPrefs), <code>.ics</code> made in the browser, VCR font stored in the project.</li>
+      <li>HTML/CSS/JS, no framework.</li>
+      <li>VHS as a CSS layer driven by <code>--vhs</code>, like VHSDriver. No curved distortion needed: nostalgic, not scary.</li>
+      <li>Flicker slow and soft; with "reduce motion", flicker and glitch off, scanlines stay.</li>
+      <li>Demo: <code>.ics</code> opened in Outlook on the laptop, all in one recording. Test Android too, and note any problem in the README.</li>
+      <li>VCR font: <b>VT323</b> (SIL Open Font License, safe for a public repo).</li>
+      <li>Local server: <code>python -m http.server 8000</code>.</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-ai">AI DEFAULT</span>Implementation details (accepted)</span></summary>
+    <ul>
+      <li>JS modules, which is why a local server is needed.</li>
+      <li>System monospace for answers.</li>
+      <li>Minutes rounded to the nearest minute, minimum 1.</li>
+      <li>Pacing: blue screen ~1.2 s, ~2.5 s between answers, NO SIGNAL ~1.2 s.</li>
+      <li><code>--vhs</code>: 0.3 record, 0.5 shelf/results, 1.0 playback.</li>
+      <li>App files at the repo root.</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-q">YOUR UNKNOWN</span>"Is the web VHS effect like a Unity shader?"</span></summary>
+    <div class="body">
+      <p>A web shader (WebGL) exists, but it only processes what it draws itself, not HTML text and buttons, unlike a URP fullscreen pass over the whole camera image. So the effect is a click-through CSS overlay plus a per-answer glitch, with one intensity variable set from JS: the same control pattern as VHSDriver.</p>
+      <p><b>Checked in the build:</b> compare the Record Screen (0.3) and Playback (1.0) side by side; the difference must be visible (<code>prd.md &gt; Playback</code>).</p>
+    </div>
+  </details>
+  <details>
+    <summary><span><span class="pill p-simp">SIMPLIFIED</span>What was kept small, and why</span></summary>
+    <ul>
+      <li><b>CSS effects</b> instead of WebGL: WebGL can't post-process HTML; the full version means redrawing the whole UI in a canvas.</li>
+      <li><b>localStorage in one browser</b> instead of accounts and a database (accounts and sync are deferred).</li>
+      <li><b>A downloaded .ics</b> instead of push notifications, which would need a server and permissions.</li>
+      <li><b>No in-app delete/reset:</b> rehearse by clearing localStorage in DevTools (delete is deferred in the PRD).</li>
+      <li><b>Hand-written screen switching</b> instead of a framework: enough for 7 screens.</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-risk">FAILURE MODES</span>Where it could break</span></summary>
+    <ul>
+      <li><b>Saved data missing or broken</b> → empty shelf with "Record your first tape"; never a crash.</li>
+      <li><b>Calendar ignores the alarm or can't open the file</b> → the tape is still saved; the limitation goes in the README.</li>
+      <li><b>Wrong "today" near midnight</b> → local date strings only, never UTC.</li>
+      <li><b>Font fails to load</b> → falls back to system monospace.</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-q">EARLY IN BUILD</span>Open issues to check first</span></summary>
+    <ul>
+      <li>Outlook: do the all-day event, description, and alarm appear when the <code>.ics</code> opens?</li>
+      <li>Android phone: test the file and alarm; record findings in the README.</li>
+    </ul>
+  </details>
+</section>
+
+<footer>Companion view of <code>devpost/spec.md</code> (canonical). Status: approved.</footer>
+</div>
+
+<script>
+  // Architecture: component details on click / Enter.
+  const COMPS = {
+    host: ["GitHub Pages / local server", "Sends the files to the browser. <code>python -m http.server 8000</code> while building and recording; GitHub Pages in 6-ship. No server code at all.", "Where It Runs and How Someone Tries It"],
+    html: ["index.html", "All 7 screens (shelf, record, tape saved, early play, blue VCR, playback, back on it) inside one CRT frame, plus the VHS overlay element. Like one Unity scene with panels toggled by SetActive.", "prd.md > Screens and Layout"],
+    css: ["css/base.css + css/vhs.css", "base.css: colors (--glass, --rec, --ready, --locked, --vcr-blue, --overtime), the two fonts, CRT frame, cassette states. vhs.css: scanlines, vignette, slow flicker, glitch, all scaled by --vhs; reduced-motion keeps only scanlines.", "prd.md > Look and Feel"],
+    app: ["js/app.js (the VHSDriver)", "Shows exactly one screen at a time and sets --vhs for it: 0.3 record, 0.5 shelf/results, 1.0 playback. Wires top-level buttons, loads tapes on start.", "prd.md > Screens and Layout, Look and Feel"],
+    screens: ["shelf.js · record.js · playback.js (+ tapes.js)", "shelf.js draws and orders tapes; record.js runs the form, ● REC clock, and validation; playback.js runs the blue screen, reveals, ▶ PLAY counter, ▶▶, timer, and back on it. tapes.js holds the date rules they share.", "prd.md > Tape Shelf, Recording a Tape, Early Play, Playback, First Step and Timer, Replaying a Completed Tape"],
+    store: ["js/store.js", "The only file touching localStorage. Saves the whole list on ■ STOP and on \"I'm back on it\". Missing or broken data → empty list.", "prd.md > States and Boundaries (Persistence)"],
+    ics: ["js/ics.js", "Writes the calendar text from a tape (all-day, first step in the description, PT8H alarm = 08:00 local) and downloads it as a .ics file via a Blob.", "prd.md > Calendar Reminder (.ics)"],
+    ls: ["localStorage: pausetape.tapes.v1", "The browser's PlayerPrefs. Holds the tape list as JSON text, only in this browser on this device.", "prd.md > States and Boundaries (Persistence)"],
+    cal: ["Calendar app (outside the app)", "Opens the downloaded .ics. Demo: Outlook on the laptop. Also tested on the Android phone; problems go in the README.", "prd.md > Calendar Reminder (.ics)"]
+  };
+  const comp = document.getElementById('comp');
+  document.querySelectorAll('.node').forEach(n => {
+    const show = () => {
+      document.querySelectorAll('.node').forEach(x => x.classList.toggle('on', x === n));
+      const [t, d, r] = COMPS[n.dataset.c];
+      comp.innerHTML = `<h3>${t}</h3><p>${d}</p><p class="ref">Implements <b>${r}</b></p>`;
+    };
+    n.addEventListener('click', show);
+    n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); } });
+  });
+
+  // Journey stepper.
+  const STEPS = [
+    ["Open the app", "The browser loads index.html, CSS, and JS. store.js reads the tapes; tapes.js works out each state from today's date; shelf.js draws the shelf.", ["index.html", "app.js", "store.js", "tapes.js", "shelf.js"], "The Core Journey · Tape Shelf"],
+    ["First use", "localStorage is empty, so the shelf draws the blank \"Record your first tape\" tape plus ● REC.", ["shelf.js"], "Tape Shelf · States and Boundaries"],
+    ["Press ● REC", "app.js shows the Record Screen and sets --vhs to 0.3. record.js starts the ● REC clock and sets the date picker's earliest day to today.", ["app.js", "record.js"], "Recording a Tape"],
+    ["Press ■ STOP", "record.js checks name, date, first step. Missing → red fields + TAPE INCOMPLETE, nothing cleared. OK → new tape added, list saved, TAPE SAVED shown.", ["record.js", "store.js", "localStorage"], "Recording a Tape"],
+    ["Add to calendar (.ics)", "ics.js writes the event text from the tape; the browser downloads pause-tape-<project>-<date>.ics; you open it in your calendar app.", ["ics.js"], "Calendar Reminder (.ics)"],
+    ["Back to the shelf", "The shelf is redrawn: the new tape is locked with \"N DAYS\", or READY if it's due today.", ["shelf.js", "tapes.js"], "Tape Shelf"],
+    ["Press ▶ on a tape", "Locked → \"TAPE DUE [date]. PLAY EARLY?\" first. playback.js remembers when ▶ was pressed (memory only), shows the blue VCR screen, sets --vhs to 1.0, starts the ▶ PLAY counter.", ["app.js", "playback.js"], "Early Play · Playback"],
+    ["Answers appear one by one", "Each answer reveals with a glitch and stays; empty ones flash blue NO SIGNAL; the first step comes last and the 10:00 timer starts. ▶▶ shows everything at once.", ["playback.js", "vhs.css"], "Playback · First Step and Timer"],
+    ["Press \"I'm back on it\"", "Minutes since ▶ are calculated (overtime included), written onto the tape once, and saved. BACK ON IT · N MIN shows.", ["playback.js", "store.js", "localStorage"], "First Step and Timer"],
+    ["Back to the shelf", "The tape is now completed, at the back, showing its minutes. ▶ on it replays the note with no timer and no button.", ["shelf.js", "playback.js"], "Replaying a Completed Tape"]
+  ];
+  const dots = document.getElementById('dots'), stage = document.getElementById('stage');
+  let cur = 0;
+  STEPS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.role = 'tab'; b.textContent = String(i + 1).padStart(2, '0'); b.setAttribute('aria-label', `Step ${i + 1}: ${s[0]}`);
+    b.addEventListener('click', () => go(i));
+    b.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') { go(Math.min(cur + 1, STEPS.length - 1)); dots.children[cur].focus(); }
+      if (e.key === 'ArrowLeft') { go(Math.max(cur - 1, 0)); dots.children[cur].focus(); }
+    });
+    dots.appendChild(b);
+  });
+  function go(i) {
+    cur = i;
+    [...dots.children].forEach((b, j) => { b.setAttribute('aria-selected', j === i); b.tabIndex = j === i ? 0 : -1; });
+    const [t, d, f, r] = STEPS[i];
+    stage.innerHTML = `<div><h4>You do</h4><div class="you">${i + 1}. ${t}</div><p class="ref" style="margin-top:14px">prd.md &gt; <b>${r}</b></p></div>
+      <div><h4>Inside the app</h4><p style="margin:0">${d}</p><div class="files">${f.map(x => `<span class="${x === 'localStorage' ? 'store' : ''}">${x}</span>`).join('')}</div></div>`;
+    document.getElementById('prev').disabled = i === 0;
+    document.getElementById('next').disabled = i === STEPS.length - 1;
+  }
+  document.getElementById('prev').addEventListener('click', () => go(cur - 1));
+  document.getElementById('next').addEventListener('click', () => go(cur + 1));
+  go(0);
+
+  // VHS preview: the planned --vhs values.
+  const tube = document.getElementById('tube'), ind = document.getElementById('ind'), tm = document.getElementById('tm');
+  const levelBtns = [...document.querySelectorAll('#levels [data-v]')];
+  levelBtns.forEach(b => b.addEventListener('click', () => {
+    levelBtns.forEach(x => x.setAttribute('aria-pressed', x === b));
+    tube.style.setProperty('--vhs', b.dataset.v);
+    const m = b.dataset.mode;
+    ind.className = m === 'rec' ? 'rec' : 'play';
+    ind.textContent = m === 'rec' ? '● REC 00:00:15' : m === 'play' ? '▶ PLAY 0:00:12' : 'READY';
+    tm.style.display = m === 'play' ? '' : 'none';
+  }));
+  tm.style.display = 'none';
+  document.getElementById('glitchBtn').addEventListener('click', () => {
+    ['a1', 'a2'].forEach((id, k) => setTimeout(() => {
+      const el = document.getElementById(id);
+      el.classList.remove('glitch'); void el.offsetWidth; el.classList.add('glitch');
+    }, k * 450));
+  });
+
+  // File tree reveals.
+  document.querySelectorAll('#tree button').forEach(b => {
+    const info = document.createElement('span');
+    info.className = 'info'; info.hidden = true; info.textContent = b.dataset.i;
+    b.after(info); b.setAttribute('aria-expanded', 'false');
+    b.addEventListener('click', () => {
+      const open = b.getAttribute('aria-expanded') === 'true';
+      b.setAttribute('aria-expanded', !open); info.hidden = open;
+    });
+  });
+</script>
+</body>
+</html>

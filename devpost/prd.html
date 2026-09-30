@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pause Tape: PRD (approved)</title>
+<!-- Companion view of devpost/prd.md. The Markdown file is canonical. -->
+<style>
+  :root {
+    --glass: #0a0f16;
+    --panel: #101824;
+    --panel-2: #152030;
+    --ink: #d9dee6;
+    --muted: #8793a3;
+    --rec: #ff4b4b;
+    --ready: #5dff9a;
+    --locked: #5b6573;
+    --vcr: #1f3fd6;
+    --amber: #ffbe55;
+    --line: #223044;
+    --osd: "Consolas", "Lucida Console", ui-monospace, monospace;
+    --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", "Consolas", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--glass); color: var(--ink); font: 16px/1.6 var(--sans); }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.03) 0 1px, transparent 1px 3px);
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 24px 96px; }
+  code { font-family: var(--mono); font-size: .92em; color: #eef2f7; }
+
+  header { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 36px; }
+  .osd { font: 700 13px/1 var(--osd); letter-spacing: .14em; text-transform: uppercase; display: flex; gap: 20px; flex-wrap: wrap; color: var(--ready); }
+  .osd .r { color: var(--rec); }
+  h1 { font: 700 clamp(38px, 6.5vw, 64px)/1.05 var(--osd); margin: 18px 0 12px; letter-spacing: .02em; text-shadow: 0 0 20px rgba(217,222,230,.18); }
+  .tagline { color: var(--muted); font-size: 18px; max-width: 66ch; margin: 0; }
+
+  section { margin: 48px 0; }
+  h2 { font: 700 13px/1 var(--osd); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); margin: 0 0 16px; }
+  .note { color: var(--muted); font-size: 14px; }
+
+  /* Scope → PRD expansion */
+  .expand { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .expand { grid-template-columns: 1fr; } }
+  .ex { background: var(--panel); border: 1px solid var(--line); padding: 16px 18px; }
+  .ex .from { font: 12px var(--mono); color: var(--muted); margin-bottom: 8px; }
+  .ex .from b { color: var(--locked); font-weight: 600; }
+  .ex .to { font-size: 15px; }
+  .ex .to::before { content: "NOW → "; font: 700 11px var(--osd); letter-spacing: .1em; color: var(--ready); }
+
+  /* Journey diagram */
+  .diagram { background: var(--panel); border: 1px solid var(--line); padding: 18px; overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; min-width: 860px; height: auto; }
+  .diagram text { font-family: var(--mono); }
+  .diagram .node { cursor: pointer; }
+  .diagram .node:hover rect, .diagram .node:focus rect { stroke: var(--amber); }
+  .diagram .node:focus { outline: none; }
+
+  /* Screen explorer */
+  .explorer { display: grid; grid-template-columns: 240px 1fr; background: var(--panel); border: 1px solid var(--line); }
+  @media (max-width: 760px) { .explorer { grid-template-columns: 1fr; } }
+  .screens { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  @media (max-width: 760px) { .screens { border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; overflow-x: auto; } }
+  .screens button {
+    text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line);
+    color: var(--muted); font: 700 13px var(--osd); letter-spacing: .06em; text-transform: uppercase;
+    padding: 14px 16px; cursor: pointer; white-space: nowrap;
+  }
+  .screens button .n { color: var(--locked); margin-right: 8px; }
+  .screens button[aria-selected="true"] { background: var(--vcr); color: #fff; }
+  .screens button[aria-selected="true"] .n { color: #b9c6ff; }
+  .screens button:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+  .panel { padding: 24px 28px 28px; min-height: 420px; }
+  .panel[hidden] { display: none; }
+  .panel h3 { margin: 0 0 4px; font: 700 20px var(--osd); letter-spacing: .04em; }
+  .panel .src { font: 12px var(--mono); color: var(--muted); margin-bottom: 16px; }
+  .panel p { margin: 0 0 12px; }
+  .panel blockquote { margin: 12px 0; padding-left: 14px; border-left: 2px solid var(--amber); color: #f1e4cc; font-style: italic; }
+
+  .facets { display: flex; gap: 8px; margin: 18px 0 12px; flex-wrap: wrap; }
+  .facets button {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--ink);
+    font: 700 12px var(--osd); letter-spacing: .1em; text-transform: uppercase;
+    padding: 8px 12px; cursor: pointer;
+  }
+  .facets button[aria-pressed="true"] { border-color: var(--ready); color: var(--ready); }
+  .facets button:focus-visible { outline: 2px solid var(--amber); }
+  .facet[hidden] { display: none; }
+  .facet ul { margin: 0; padding-left: 22px; }
+  .facet li { margin: 6px 0; }
+  ul.criteria { list-style: none; padding-left: 0; }
+  ul.criteria li { padding-left: 28px; position: relative; }
+  ul.criteria li::before { content: "□"; position: absolute; left: 4px; color: var(--ready); font-family: var(--mono); }
+
+  /* Tape state swatches */
+  .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 8px; }
+  @media (max-width: 760px) { .states { grid-template-columns: 1fr 1fr; } }
+  .tape { border: 1px solid var(--line); background: #0d141e; padding: 12px; font-family: var(--osd); font-size: 12px; letter-spacing: .06em; }
+  .tape .lbl { background: #e7eaee; color: #0a0f16; padding: 4px 6px; font-weight: 700; margin-bottom: 8px; }
+  .tape.locked { opacity: .75; }
+  .tape.locked .lbl { background: #8f98a5; }
+  .tape.locked .st { color: var(--locked); }
+  .tape.ready { border-color: var(--ready); box-shadow: 0 0 14px rgba(93,255,154,.18); }
+  .tape.ready .st { color: var(--ready); }
+  .tape.done .st { color: var(--ink); }
+  .tape.blank { border-style: dashed; color: var(--muted); display: flex; align-items: center; justify-content: center; text-align: center; min-height: 78px; }
+
+  /* Look and feel */
+  .lf { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .lf { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); padding: 18px 20px; }
+  .card h4 { margin: 0 0 10px; font: 700 12px var(--osd); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .sw { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 14px; }
+  .sw i { width: 28px; height: 18px; border: 1px solid rgba(255,255,255,.2); flex: none; }
+  .type-osd { font: 700 22px var(--osd); letter-spacing: .08em; }
+  .type-mono { font: 15px var(--mono); }
+  .meter { margin-top: 10px; }
+  .meter div { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 14px; }
+  .meter span.bar { height: 10px; background: repeating-linear-gradient(to right, var(--ready) 0 3px, transparent 3px 6px); }
+
+  /* Decisions + assumptions */
+  details { background: var(--panel); border: 1px solid var(--line); margin-bottom: 10px; }
+  summary { cursor: pointer; padding: 15px 20px; list-style: none; display: flex; justify-content: space-between; align-items: center; font: 700 14px var(--osd); letter-spacing: .06em; text-transform: uppercase; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "▶"; font-size: 11px; color: var(--muted); transition: transform .15s; }
+  details[open] summary::after { transform: rotate(90deg); }
+  summary:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+  details ul { margin: 0; padding: 0 24px 18px 42px; }
+  details li { margin: 7px 0; }
+  .pill { font: 700 11px var(--osd); letter-spacing: .1em; padding: 4px 8px; margin-right: 12px; color: var(--glass); }
+  .p-now { background: var(--ready); } .p-def { background: var(--amber); } .p-later { background: #8fb0ff; } .p-non { background: var(--rec); } .p-dec { background: var(--ink); } .p-asm { background: var(--amber); }
+  .assume { border-color: var(--amber); }
+
+  footer { margin-top: 64px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font: 13px var(--mono); }
+  @media (prefers-reduced-motion: no-preference) {
+    .panel:not([hidden]) { animation: flick .22s steps(3); }
+    @keyframes flick { 0% { opacity: .2; transform: translateX(3px); } 50% { opacity: .7; transform: translateX(-2px); } 100% { opacity: 1; transform: none; } }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="osd"><span>▶ PLAY</span><span>PRD · APPROVED</span><span class="r">● REC</span><span>■ STOP</span></div>
+  <h1>PAUSE TAPE</h1>
+  <p class="tagline">Product requirements. Record a tape to your future self when you stop; play it back when you return so you know exactly what to do next. First real user: pausing <strong>NO SIGNAL</strong> until 10 January 2027.</p>
+</header>
+
+<section>
+  <h2>Scope said… now we know exactly what that means</h2>
+  <div class="expand">
+    <div class="ex"><div class="from"><b>scope:</b> "Record a tape: project name, the four text fields, return date"</div><div class="to">One screen with a camcorder ● REC timer. Only name, date, and first step are required; missing ones turn red with "TAPE INCOMPLETE" and nothing typed is lost.</div></div>
+    <div class="ex"><div class="from"><b>scope:</b> "Tape shelf … locked with a countdown"</div><div class="to">Shelf is home. Gray = locked with countdown, green = READY, label with minutes = back on it. Empty shelf shows "Record your first tape".</div></div>
+    <div class="ex"><div class="from"><b>scope:</b> "CRT/scanline playback of the note"</div><div class="to">Blue VCR screen, answers one by one with a glitch, first step last, ▶▶ to skip. Empty answers flash "NO SIGNAL".</div></div>
+    <div class="ex"><div class="from"><b>scope:</b> "10-minute timer + I'm back on it records minutes"</div><div class="to">Minutes counted from ▶. Overtime keeps counting honestly ("+01:23"). Replays never overwrite the first result.</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>The Core Journey</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 980 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="jt jd">
+      <title id="jt">Pause Tape journey</title>
+      <desc id="jd">Tape Shelf leads to Record Screen via REC. STOP with missing required fields stays on Record with TAPE INCOMPLETE. STOP with required fields leads to Tape Saved, with optional .ics calendar file, then back to the Shelf. From the Shelf, a READY tape plays directly; a locked tape goes through an early-play confirmation. Playing shows a blue VCR screen, then Playback with answers one by one, then the first step and 10-minute timer, then I'm back on it leads to the Back On It result and back to the Shelf. A completed tape replays without the timer.</desc>
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8793a3"/></marker>
+        <marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ff4b4b"/></marker>
+        <marker id="aG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5dff9a"/></marker>
+      </defs>
+
+      <text x="20" y="24" fill="#ff4b4b" font-size="12" letter-spacing="2">● PAUSE</text>
+      <text x="20" y="226" fill="#5dff9a" font-size="12" letter-spacing="2">▶ REWIND</text>
+
+      <!-- Shelf (center-left, spans both rows) -->
+      <g class="node" tabindex="0" data-go="shelf" role="button" aria-label="Open Tape Shelf details">
+        <rect x="20" y="130" width="150" height="80" fill="#152030" stroke="#d9dee6"/>
+        <text x="36" y="160" fill="#d9dee6" font-size="15" font-weight="700">TAPE SHELF</text>
+        <text x="36" y="182" fill="#8793a3" font-size="12">home · all tapes</text>
+        <text x="36" y="198" fill="#8793a3" font-size="12">● REC button</text>
+      </g>
+
+      <!-- Record -->
+      <path d="M95,130 L95,76 L226,76" fill="none" stroke="#ff4b4b" stroke-width="1.5" marker-end="url(#aR)"/>
+      <text x="104" y="68" fill="#ff4b4b" font-size="12">● REC</text>
+      <g class="node" tabindex="0" data-go="record" role="button" aria-label="Open Record Screen details">
+        <rect x="230" y="40" width="170" height="72" fill="#152030" stroke="#ff4b4b"/>
+        <text x="246" y="68" fill="#d9dee6" font-size="15" font-weight="700">RECORD</text>
+        <text x="246" y="90" fill="#8793a3" font-size="12">label + 4 questions</text>
+      </g>
+      <!-- incomplete loop -->
+      <path d="M340,40 Q340,10 370,10 Q400,10 400,40" fill="none" stroke="#ffbe55" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#a)"/>
+      <text x="410" y="22" fill="#ffbe55" font-size="11">■ STOP, missing required → TAPE INCOMPLETE</text>
+
+      <line x1="400" y1="76" x2="466" y2="76" stroke="#8793a3" stroke-width="1.5" marker-end="url(#a)"/>
+      <text x="408" y="96" fill="#8793a3" font-size="11">■ STOP</text>
+      <g class="node" tabindex="0" data-go="saved" role="button" aria-label="Open Tape Saved details">
+        <rect x="470" y="40" width="170" height="72" fill="#152030" stroke="#223044"/>
+        <text x="486" y="68" fill="#d9dee6" font-size="15" font-weight="700">TAPE SAVED</text>
+        <text x="486" y="90" fill="#ffbe55" font-size="12">Add to calendar (.ics)</text>
+      </g>
+      <path d="M555,112 L555,150 L174,150" fill="none" stroke="#8793a3" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a)"/>
+      <text x="400" y="142" fill="#8793a3" font-size="11">back to shelf · new tape appears</text>
+
+      <!-- Rewind row -->
+      <path d="M95,210 L95,286 L126,286" fill="none" stroke="#5dff9a" stroke-width="1.5" marker-end="url(#aG)"/>
+      <g class="node" tabindex="0" data-go="early" role="button" aria-label="Open Early Play details">
+        <rect x="130" y="244" width="130" height="84" fill="#152030" stroke="#5b6573"/>
+        <text x="144" y="270" fill="#d9dee6" font-size="13" font-weight="700">EARLY PLAY?</text>
+        <text x="144" y="290" fill="#8793a3" font-size="11">only if locked</text>
+        <text x="144" y="308" fill="#8793a3" font-size="11">confirm / cancel</text>
+      </g>
+      <text x="104" y="238" fill="#5dff9a" font-size="12">▶</text>
+
+      <line x1="260" y1="286" x2="296" y2="286" stroke="#8793a3" stroke-width="1.5" marker-end="url(#a)"/>
+      <g class="node" tabindex="0" data-go="playback" role="button" aria-label="Open Playback details">
+        <rect x="300" y="244" width="190" height="84" fill="#1f3fd6" stroke="#1f3fd6"/>
+        <text x="314" y="270" fill="#fff" font-size="15" font-weight="700">PLAYBACK</text>
+        <text x="314" y="290" fill="#dbe3ff" font-size="11">blue VCR → answers 1 by 1</text>
+        <text x="314" y="308" fill="#dbe3ff" font-size="11">▶ PLAY counter · ▶▶ skip</text>
+      </g>
+
+      <line x1="490" y1="286" x2="526" y2="286" stroke="#8793a3" stroke-width="1.5" marker-end="url(#a)"/>
+      <g class="node" tabindex="0" data-go="timer" role="button" aria-label="Open First Step and Timer details">
+        <rect x="530" y="244" width="190" height="84" fill="#152030" stroke="#5dff9a"/>
+        <text x="544" y="270" fill="#5dff9a" font-size="15" font-weight="700">FIRST STEP</text>
+        <text x="544" y="290" fill="#8793a3" font-size="11">10:00 timer → +overtime</text>
+        <text x="544" y="308" fill="#d9dee6" font-size="11">[ I'm back on it ]</text>
+      </g>
+
+      <line x1="720" y1="286" x2="756" y2="286" stroke="#8793a3" stroke-width="1.5" marker-end="url(#a)"/>
+      <g class="node" tabindex="0" data-go="back" role="button" aria-label="Open Back On It details">
+        <rect x="760" y="244" width="200" height="84" fill="#152030" stroke="#d9dee6"/>
+        <text x="774" y="270" fill="#d9dee6" font-size="15" font-weight="700">BACK ON IT · 4 MIN</text>
+        <text x="774" y="290" fill="#8793a3" font-size="11">minutes since ▶</text>
+        <text x="774" y="308" fill="#8793a3" font-size="11">saved on the label</text>
+      </g>
+      <path d="M860,244 L860,190 L174,190" fill="none" stroke="#8793a3" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a)"/>
+      <text x="600" y="182" fill="#8793a3" font-size="11">back to shelf · tape keeps its minutes</text>
+
+      <!-- Replay -->
+      <text x="300" y="346" fill="#8793a3" font-size="11">Completed tape → replay: answers only, no timer, minutes never change.</text>
+    </svg>
+  </div>
+  <p class="note">Click any box in the diagram to jump to that screen below.</p>
+</section>
+
+<section>
+  <h2>Screens: behavior, states, and how we'll know it works</h2>
+  <div class="explorer">
+    <div class="screens" role="tablist" aria-label="Screens" aria-orientation="vertical">
+      <button role="tab" id="tab-shelf" aria-controls="p-shelf" aria-selected="true"><span class="n">01</span>Tape Shelf</button>
+      <button role="tab" id="tab-record" aria-controls="p-record" aria-selected="false" tabindex="-1"><span class="n">02</span>Record</button>
+      <button role="tab" id="tab-saved" aria-controls="p-saved" aria-selected="false" tabindex="-1"><span class="n">03</span>Tape Saved + .ics</button>
+      <button role="tab" id="tab-early" aria-controls="p-early" aria-selected="false" tabindex="-1"><span class="n">04</span>Early Play</button>
+      <button role="tab" id="tab-playback" aria-controls="p-playback" aria-selected="false" tabindex="-1"><span class="n">05</span>Playback</button>
+      <button role="tab" id="tab-timer" aria-controls="p-timer" aria-selected="false" tabindex="-1"><span class="n">06</span>First Step + Timer</button>
+      <button role="tab" id="tab-back" aria-controls="p-back" aria-selected="false" tabindex="-1"><span class="n">07</span>Back On It</button>
+      <button role="tab" id="tab-replay" aria-controls="p-replay" aria-selected="false" tabindex="-1"><span class="n">08</span>Replay</button>
+    </div>
+
+    <!-- 01 Shelf -->
+    <div class="panel" role="tabpanel" id="p-shelf" aria-labelledby="tab-shelf">
+      <h3>TAPE SHELF</h3>
+      <div class="src">prd.md › Features and Behavior › Tape Shelf</div>
+      <p>The home screen, inside the CRT frame. Every saved tape plus the <strong>● REC</strong> button. Status is readable by color alone.</p>
+      <div class="states">
+        <div class="tape blank">Record your<br>first tape</div>
+        <div class="tape locked"><div class="lbl">NO SIGNAL · 10 JAN 2027</div><div class="st">■ LOCKED · 102 DAYS</div></div>
+        <div class="tape ready"><div class="lbl">SIDE PROJECT · TODAY</div><div class="st">▶ READY</div></div>
+        <div class="tape done"><div class="lbl">SIDE PROJECT · 30 SEP</div><div class="st">BACK ON IT · 4 MIN</div></div>
+      </div>
+      <p class="note" style="margin-top:8px">Shown in shelf order: READY first, then locked (nearest date first), completed last. Example tapes are illustrative.</p>
+      <div class="facets" data-group="shelf"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li>Locked: return date in the future. Dim gray, countdown in days (e.g. "102 DAYS").</li>
+        <li>READY: return date today or earlier, not yet completed. Green.</li>
+        <li>Back on it: minutes recorded. Label shows them; replayable.</li>
+        <li><strong>Order:</strong> READY first → locked, nearest return date first → completed last.</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li><strong>Empty shelf:</strong> one blank tape "Record your first tape" + ● REC.</li>
+        <li><strong>Persistence:</strong> tapes, answers, and minutes are still there after closing and reopening.</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>Opening the app shows the Tape Shelf first, inside the CRT frame with scanlines.</li>
+        <li>With no tapes: one blank tape "Record your first tape" and ● REC.</li>
+        <li>Each label shows project name and return date.</li>
+        <li>Future return date → dim gray with countdown in days.</li>
+        <li>Today or earlier → green "READY".</li>
+        <li>Completed tape shows its minutes on the label.</li>
+        <li>Order: READY first, then locked (nearest date first), then completed.</li>
+        <li>Tapes survive closing and reopening the app.</li>
+      </ul></div>
+    </div>
+
+    <!-- 02 Record -->
+    <div class="panel" role="tabpanel" id="p-record" aria-labelledby="tab-record" hidden>
+      <h3>RECORD</h3>
+      <div class="src">prd.md › Features and Behavior › Recording a Tape</div>
+      <p>Camcorder viewfinder: <strong style="color:var(--rec)">● REC</strong> with a running timer at the top. Everything on one screen. Scanlines stay thin so typing is comfortable.</p>
+      <blockquote>"Six separate steps feel slow, both in use and in the demo video."</blockquote>
+      <div class="facets" data-group="record"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li><strong>Tape label:</strong> project name*, return date*.</li>
+        <li><strong>Message:</strong> where I stopped · first step when I come back (~10 min)* · what I'm still unsure about · why this project matters to me.</li>
+        <li>* required: "without them the tape can't work: no label, no reminder, no step for the timer."</li>
+        <li>Date choices start from today. Today is allowed.</li>
+        <li><strong>■ STOP</strong> saves.</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li><strong>Incomplete:</strong> not saved; empty required fields marked red with "TAPE INCOMPLETE"; typed answers kept.</li>
+        <li><strong>Optional answers empty:</strong> allowed. "I don't want to be forced to fill in something that doesn't exist."</li>
+        <li><strong>Past dates:</strong> can't be picked.</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>● REC opens the Record Screen with ● REC indicator and running timer.</li>
+        <li>Name, date, and all four questions on one screen.</li>
+        <li>Past dates can't be selected; today can.</li>
+        <li>■ STOP with name, date, first step → saved, "TAPE SAVED" shows.</li>
+        <li>■ STOP with any of those empty → not saved, red fields, "TAPE INCOMPLETE", typing preserved.</li>
+        <li>Saving works with optional answers empty.</li>
+      </ul></div>
+    </div>
+
+    <!-- 03 Saved -->
+    <div class="panel" role="tabpanel" id="p-saved" aria-labelledby="tab-saved" hidden>
+      <h3>TAPE SAVED + .ICS</h3>
+      <div class="src">prd.md › Features and Behavior › Calendar Reminder (.ics)</div>
+      <p>A brief "TAPE SAVED" screen with <strong>"Add to calendar (.ics)"</strong>, then back to the shelf where the new tape appears.</p>
+      <div class="facets" data-group="saved"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li>The button provides a calendar file for the return date.</li>
+        <li>The reminder lands in the phone or laptop calendar.</li>
+        <li>All-day event, named after the project. <strong>Description holds your first step</strong>, with a <strong>morning alarm at 08:00 WIB</strong>, so the reminder alone tells you what to do.</li>
+        <li>Return date today → the new tape is READY right away (needed for the demo).</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li><strong>Calendar skipped:</strong> the tape is still saved; the file is optional.</li>
+        <li><em>Why:</em> "When the reminder pops up on my phone, I already know my first step before even opening the app."</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>"Add to calendar (.ics)" produces an .ics file.</li>
+        <li>Opening it adds an all-day event on the return date, named after the project.</li>
+        <li>The event description contains the first step.</li>
+        <li>The event has an alarm at 08:00 WIB on the return date.</li>
+        <li>Leaving the screen returns to the shelf with the new tape shown.</li>
+      </ul></div>
+    </div>
+
+    <!-- 04 Early -->
+    <div class="panel" role="tabpanel" id="p-early" aria-labelledby="tab-early" hidden>
+      <h3>EARLY PLAY</h3>
+      <div class="src">prd.md › Features and Behavior › Early Play</div>
+      <blockquote>"So it still feels like a message from the past, but doesn't block me if I can come back sooner."</blockquote>
+      <div class="facets" data-group="early"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li>Pressing ▶ on a locked tape asks for confirmation first.</li>
+        <li>VCR-style: <strong style="font-family:var(--osd)">"TAPE DUE 10 JAN 2027. PLAY EARLY?"</strong> (the tape's own date) with <strong style="color:var(--ready)">▶ PLAY</strong> and <strong>CANCEL</strong>.</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li><strong>▶ PLAY:</strong> full playback, first step, timer, minutes, as normal.</li>
+        <li><strong>CANCEL:</strong> back to the shelf, still locked.</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>▶ on a locked tape shows "TAPE DUE [date]. PLAY EARLY?" with ▶ PLAY and CANCEL.</li>
+        <li>▶ PLAY plays the tape normally.</li>
+        <li>CANCEL returns to the shelf; tape stays locked.</li>
+      </ul></div>
+    </div>
+
+    <!-- 05 Playback -->
+    <div class="panel" role="tabpanel" id="p-playback" aria-labelledby="tab-playback" hidden>
+      <h3>PLAYBACK</h3>
+      <div class="src">prd.md › Features and Behavior › Playback</div>
+      <p>A brief blue VCR screen, then the answers <strong>one by one</strong>, each with a short VHS glitch, each staying on screen. <strong style="color:var(--ready)">▶ PLAY</strong> counter in a corner. Scanlines at their strongest.</p>
+      <blockquote>"So it feels like watching an old recording of myself, not reading a boring form."</blockquote>
+      <div class="facets" data-group="playback"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li>Order: the message answers first, <strong>first step last</strong>: "it's the most important part."</li>
+        <li><strong>▶▶</strong> skips the rest: "I don't want to be forced to wait if I already remember."</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li><strong>Empty optional answer:</strong> flashes briefly as a blue "NO SIGNAL" screen.</li>
+        <li><strong>Skipped:</strong> everything shows at once, including the first step, and the timer starts.</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>▶ on a READY tape → brief blue VCR screen → Playback.</li>
+        <li>Answers appear one at a time with glitch; earlier ones stay.</li>
+        <li>▶ PLAY counter runs in a corner.</li>
+        <li>Empty optional answer shows briefly as "NO SIGNAL".</li>
+        <li>First step is the last thing to appear.</li>
+        <li>▶▶ shows everything including the first step; timer starts.</li>
+        <li>Effects visibly stronger than on the Record Screen.</li>
+      </ul></div>
+    </div>
+
+    <!-- 06 Timer -->
+    <div class="panel" role="tabpanel" id="p-timer" aria-labelledby="tab-timer" hidden>
+      <h3>FIRST STEP + TIMER</h3>
+      <div class="src">prd.md › Features and Behavior › First Step and Timer</div>
+      <p>The moment the first step appears, a <strong>10:00</strong> countdown starts beside the <strong>"I'm back on it"</strong> button.</p>
+      <blockquote>"The 10-minute timer is a nudge to start, not a punishment. If I needed 13 minutes, that still means I made it back, so the number has to be honest."</blockquote>
+      <div class="facets" data-group="timer"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li>Countdown from 10:00.</li>
+        <li>Minutes are counted from pressing ▶, not from when the timer appears.</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li><strong>Overtime:</strong> after 0:00, it keeps counting as "+01:23" in a different color. The button still works.</li>
+        <li><strong>App closed while the timer runs:</strong> nothing is recorded; the tape stays READY without minutes and plays again from the start. A locked tape played early returns to locked.</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>Countdown starts the moment the first step appears.</li>
+        <li>"I'm back on it" is visible alongside the timer.</li>
+        <li>After 10 min, overtime "+mm:ss" in a different color; button still works.</li>
+        <li>Closing the app mid-timer → reopening shows the tape still READY, no minutes; it plays from the start.</li>
+      </ul></div>
+    </div>
+
+    <!-- 07 Back -->
+    <div class="panel" role="tabpanel" id="p-back" aria-labelledby="tab-back" hidden>
+      <h3>BACK ON IT · 4 MIN</h3>
+      <div class="src">prd.md › Features and Behavior › First Step and Timer</div>
+      <p>A brief result screen, then back to the shelf, where the tape's label now shows the minutes.</p>
+      <div class="facets" data-group="back"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li>Shows "BACK ON IT · N MIN". N includes any overtime (e.g. 13 MIN).</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li><strong>Completed tape:</strong> stays on the shelf as proof. "If it's deleted, the proof disappears too."</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>Pressing "I'm back on it" shows "BACK ON IT · N MIN", N = minutes since ▶.</li>
+        <li>Back on the shelf, the label shows the minutes.</li>
+      </ul></div>
+    </div>
+
+    <!-- 08 Replay -->
+    <div class="panel" role="tabpanel" id="p-replay" aria-labelledby="tab-replay" hidden>
+      <h3>REPLAY</h3>
+      <div class="src">prd.md › Features and Behavior › Replaying a Completed Tape</div>
+      <blockquote>"Replaying is for remembering again, not returning from a pause."</blockquote>
+      <div class="facets" data-group="replay"></div>
+      <div class="facet" data-kind="behavior"><ul>
+        <li>A completed tape plays its answers again.</li>
+        <li>Pausing the same project again = record a new tape.</li>
+      </ul></div>
+      <div class="facet" data-kind="states" hidden><ul>
+        <li>No timer, no "I'm back on it" on replay.</li>
+        <li>The original minutes are never overwritten.</li>
+      </ul></div>
+      <div class="facet" data-kind="criteria" hidden><ul class="criteria">
+        <li>Replaying plays the answers as in Playback.</li>
+        <li>No timer and no button appear.</li>
+        <li>Label minutes never change after the first time.</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Look and Feel</h2>
+  <div class="lf">
+    <div class="card">
+      <h4>Two typefaces, two jobs</h4>
+      <div class="type-osd">● REC ▶ PLAY READY</div>
+      <p class="note" style="margin:4px 0 14px">Blocky VCR on-screen-display font: labels, buttons, indicators, countdowns.</p>
+      <div class="type-mono">"Open the project and re-read the last note before changing anything."</div>
+      <p class="note" style="margin:4px 0 0">Clean monospace: your own answers, quick to read on return. (Sample text is illustrative.)</p>
+    </div>
+    <div class="card">
+      <h4>Every color means something</h4>
+      <div class="sw"><i style="background:var(--glass)"></i>Blue-black CRT glass · faded white text</div>
+      <div class="sw"><i style="background:var(--rec)"></i>Red: only ● REC (recording)</div>
+      <div class="sw"><i style="background:var(--ready)"></i>Green: READY and ▶ PLAY</div>
+      <div class="sw"><i style="background:var(--locked)"></i>Dim gray: locked, not yet time</div>
+      <div class="sw"><i style="background:var(--vcr)"></i>VCR blue: insert/play and "NO SIGNAL"</div>
+    </div>
+    <div class="card">
+      <h4>Effects carry meaning (from NO SIGNAL)</h4>
+      <div class="meter">
+        <div><span style="width:120px">Recording</span><span class="bar" style="width:40px;opacity:.5"></span>thin, comfortable typing</div>
+        <div><span style="width:120px">Shelf</span><span class="bar" style="width:90px;opacity:.7"></span>CRT frame, scanlines</div>
+        <div><span style="width:120px">Playback</span><span class="bar" style="width:180px"></span>strongest + glitch</div>
+      </div>
+      <p class="note" style="margin:10px 0 0">Relative intensity as agreed; exact values get chosen in the spec/build.</p>
+    </div>
+    <div class="card">
+      <h4>Borrowed from NO SIGNAL</h4>
+      <ul style="margin:0;padding-left:20px">
+        <li>Camcorder viewfinder + timestamp + REC → Record</li>
+        <li>Hub tape-player TV, "Recovered Tapes" → Playback</li>
+        <li>Archive Terminal CRT → Tape Shelf</li>
+      </ul>
+      <p style="margin:12px 0 0"><strong style="color:var(--rec)">Avoid:</strong> horror mood and heavy static. Nostalgic, not scary.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Decisions, boundary, and open items</h2>
+  <details class="assume" open>
+    <summary><span><span class="pill p-asm">UPDATED</span>Your review changes (all confirmed)</span></summary>
+    <ul>
+      <li>Countdown in <strong>days</strong>: confirmed.</li>
+      <li>Shelf order: <strong>READY → locked (nearest first) → completed</strong>: "so I don't have to hunt for it among the locked tapes… completed tapes are just proof."</li>
+      <li>Calendar: all-day, <strong>first step in the description</strong>, <strong>alarm 08:00 WIB</strong>: "I already know my first step before even opening the app."</li>
+      <li>Early play: <strong>"TAPE DUE 10 JAN 2027. PLAY EARLY?"</strong> with ▶ PLAY / CANCEL.</li>
+      <li>New: <strong>app closed mid-timer</strong> → tape stays READY, no minutes, replays from the start.</li>
+      <li>A locked tape played early and interrupted <strong>returns to locked</strong>: "its return date still hasn't arrived."</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-dec">DECIDED</span>Your product decisions</span></summary>
+    <ul>
+      <li>Shelf is home: on return, you immediately see the tape.</li>
+      <li>Recording is one screen: steps feel slow in use and in the demo.</li>
+      <li>● REC / ■ STOP / ▶ PLAY / ▶▶: camcorder and VCR language.</li>
+      <li>Only name, date, and first step are required.</li>
+      <li>Dates start from today; today is allowed and immediately READY.</li>
+      <li>Locked tapes playable early after confirmation.</li>
+      <li>Answers one by one, ▶▶ to skip; first step last, timer starts immediately.</li>
+      <li>Minutes counted from ▶; overtime keeps counting honestly.</li>
+      <li>Completed tapes keep their minutes forever; replays are for remembering.</li>
+      <li>Pausing the same project again = a new tape.</li>
+      <li>Countdown in days; shelf order READY → locked → completed.</li>
+      <li>Calendar event holds the first step and alarms at 08:00 WIB.</li>
+      <li>VCR-style early-play prompt.</li>
+      <li>Closing mid-timer records nothing; tape stays READY.</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-now">NOW</span>What we're building</span></summary>
+    <ul>
+      <li>Tape Shelf: empty state, locked / READY / completed, ● REC</li>
+      <li>Record Screen: one screen, "TAPE INCOMPLETE" validation, dates from today, ■ STOP</li>
+      <li>Tape Saved + "Add to calendar (.ics)": all-day, first step in description, alarm 08:00 WIB</li>
+      <li>Early Play confirmation</li>
+      <li>Playback: blue VCR screen, one-by-one with glitch, ▶ PLAY counter, ▶▶, "NO SIGNAL"</li>
+      <li>First step + 10-min timer with overtime + "I'm back on it" + result</li>
+      <li>Replay without timer</li>
+      <li>Tapes persist between visits</li>
+      <li>The Look and Feel above</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-def">DEFERRED</span>Implied, but not now</span></summary>
+    <ul>
+      <li>Archiving and deleting tapes (you moved these to Later)</li>
+      <li>Editing a saved tape (record a new one instead)</li>
+      <li>Accounts and syncing across devices</li>
+      <li>In-app notifications (the .ics reminder covers it)</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-later">LATER</span>Possible enhancements</span></summary>
+    <ul>
+      <li>Voice recording of the note</li>
+      <li>Longer free-form extra notes</li>
+      <li>Welcome message/intro when a tape plays</li>
+      <li>VHS mechanism sound effects</li>
+      <li>Archive and delete tapes</li>
+    </ul>
+  </details>
+  <details>
+    <summary><span><span class="pill p-non">NON-GOAL</span>What Pause Tape won't do</span></summary>
+    <ul>
+      <li>Horror mood or heavy static: nostalgic, not scary.</li>
+      <li>A full project manager (tasks, issues): one message and one first step; your GDD and issue.md cover the rest.</li>
+      <li>Forcing you to fill in everything.</li>
+    </ul>
+  </details>
+</section>
+
+<footer>Companion view of <code>devpost/prd.md</code> (canonical). Status: approved.</footer>
+</div>
+
+<script>
+  // Screen explorer tabs (arrow keys move between screens).
+  const tabs = [...document.querySelectorAll('.screens [role="tab"]')];
+  function select(tab, focus = true) {
+    tabs.forEach(t => {
+      const on = t === tab;
+      t.setAttribute('aria-selected', on);
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if (focus) tab.focus();
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => select(t));
+    t.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); select(tabs[(i + 1) % tabs.length]); }
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); select(tabs[(i - 1 + tabs.length) % tabs.length]); }
+    });
+  });
+
+  // Diagram boxes jump to their screen.
+  document.querySelectorAll('.diagram .node').forEach(n => {
+    const go = () => {
+      const tab = document.getElementById('tab-' + n.dataset.go);
+      select(tab, false);
+      document.querySelector('.explorer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    n.addEventListener('click', go);
+    n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+
+  // Behavior / States / Criteria toggles inside each screen.
+  const kinds = [['behavior', 'Behavior'], ['states', 'States & what-ifs'], ['criteria', 'How we know it works']];
+  document.querySelectorAll('.facets').forEach(bar => {
+    const panel = bar.closest('.panel');
+    kinds.forEach(([k, label], i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.setAttribute('aria-pressed', i === 0);
+      b.addEventListener('click', () => {
+        bar.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+        panel.querySelectorAll('.facet').forEach(f => f.hidden = f.dataset.kind !== k);
+      });
+      bar.appendChild(b);
+    });
+  });
+</script>
+</body>
+</html>
