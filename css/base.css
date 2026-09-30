@@ -37,6 +37,11 @@
   display: none !important;
 }
 
+/* Dim scrollbars that sit quietly on the CRT glass. */
+* {
+  scrollbar-color: rgba(217, 222, 232, 0.25) transparent;
+}
+
 html,
 body {
   height: 100%;
@@ -215,7 +220,7 @@ body {
 .shelf {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   align-content: start;
   gap: 16px;
   overflow-y: auto;
@@ -277,8 +282,9 @@ body {
   padding: 1px 6px;
   background: #0b0e0c;
   color: var(--state);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-shadow: 0 0 6px var(--state);
+  white-space: nowrap;
 }
 
 .tape__window {
@@ -502,6 +508,184 @@ body {
   display: flex;
   gap: 12px;
   margin-top: 8px;
+}
+
+/* ── ▶ and ▶▶ drawn in CSS ────────────────────────────────────── */
+
+.ico--play {
+  width: 0.56em;
+  height: 0.64em;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+.ico--ff {
+  display: inline-flex;
+  width: auto;
+  height: auto;
+}
+
+/* ── Early Play Confirmation ──────────────────────────────────── */
+
+.early__text {
+  margin: 0;
+  font-size: min(2em, 6vw);
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 10px rgba(217, 222, 232, 0.45);
+}
+
+.early__line {
+  display: block;
+  white-space: nowrap;
+}
+
+.btn--play {
+  color: var(--ready);
+  border-color: rgba(98, 255, 143, 0.45);
+}
+
+/* ── Blue VCR Screen ──────────────────────────────────────────── */
+
+.screen--blue {
+  background: var(--vcr-blue);
+}
+
+.blue__play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.6em;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+}
+
+/* ── Playback Screen ──────────────────────────────────────────── */
+
+.osd__play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  color: var(--ready);
+  text-shadow: 0 0 8px rgba(98, 255, 143, 0.5);
+}
+
+.answers {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  margin: 0;
+  padding: 2px 6px;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.answer {
+  display: grid;
+  gap: 4px;
+  padding: 6px 12px 8px;
+  border-left: 2px solid var(--line);
+}
+
+.answer__label {
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+}
+
+/* The learner's words, in the clean answer font. */
+.answer__text,
+.first__text {
+  margin: 0;
+  font-family: var(--font-answer);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.answer__text {
+  font-size: 18px;
+}
+
+/* An empty answer: a blue NO SIGNAL panel for a moment, then a dim line. */
+.answer--nosignal .answer__text {
+  color: var(--ink-dim);
+  font-family: var(--font-osd);
+  font-size: 1em;
+  letter-spacing: 0.14em;
+}
+
+.answer--nosignal-flash {
+  border-left-color: transparent;
+  border-radius: 4px;
+  background: var(--vcr-blue);
+}
+
+.answer--nosignal-flash .answer__label,
+.answer--nosignal-flash .answer__text {
+  color: #ffffff;
+}
+
+.answer--nosignal-flash .answer__text {
+  font-size: 1.6em;
+}
+
+/* The first step comes last and matters most, so it gets its own box with the timer. */
+.first {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(217, 222, 232, 0.35);
+  border-radius: 6px;
+  background: rgba(3, 6, 12, 0.6);
+}
+
+.first__text {
+  font-size: 20px;
+}
+
+.first__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-top: 4px;
+}
+
+.timer {
+  font-size: 2.4em;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 10px rgba(217, 222, 232, 0.4);
+}
+
+.timer--over {
+  color: var(--overtime);
+  text-shadow: 0 0 10px rgba(255, 176, 32, 0.5);
+}
+
+/* Keeps the learner's exact wording, "I'm back on it", instead of uppercasing it. */
+.btn--back {
+  padding: 0.35em 1.1em;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--glass);
+  font-size: 1.1em;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.btn--back:hover {
+  background: #ffffff;
+}
+
+.osd--controls {
+  justify-content: space-between;
 }
 
 /* ── Small screens (judges on a phone) ────────────────────────── */

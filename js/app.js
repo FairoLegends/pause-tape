@@ -6,9 +6,10 @@ import { loadTapes, saveTapes } from './store.js';
 import { todayLocal, formatVcrDate } from './tapes.js';
 import { renderShelf } from './shelf.js';
 import { initRecord } from './record.js';
+import { initPlayback, PACE } from './playback.js';
 
 // --vhs per screen; css/vhs.css reads it once the effect layer lands (slice 3).
-const VHS = { shelf: 0.5, record: 0.3, saved: 0.5 };
+const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, blue: 1, playback: 1, backonit: 0.5 };
 
 const screens = Object.fromEntries(
   [...document.querySelectorAll('[data-screen]')].map((section) => [section.dataset.screen, section]),
@@ -16,6 +17,8 @@ const screens = Object.fromEntries(
 
 let tapes = loadTapes();
 let current = null;
+let earlyTape = null;
+let backOnItTimer = null;
 
 const record = initRecord(screens.record, {
   onSave(tape) {
@@ -28,14 +31,33 @@ const record = initRecord(screens.record, {
   onBack: () => show('shelf'),
 });
 
+const playback = initPlayback(screens, {
+  show,
+  // The only place minutes are written, and only once (spec.md > Data Model).
+  onBackOnIt(tape, minutes) {
+    tapes = tapes.map((t) => (t.id === tape.id && t.backOnItMinutes == null
+      ? { ...t, backOnItMinutes: minutes, completedAt: new Date().toISOString() }
+      : t));
+    saveTapes(tapes);
+    screens.backonit.querySelector('[data-backonit-text]').textContent = `BACK ON IT · ${minutes} MIN`;
+    screens.backonit.querySelector('[data-backonit-label]').textContent = tape.project;
+    show('backonit');
+    backOnItTimer = setTimeout(() => show('shelf'), PACE.backOnItMs);
+  },
+  onStop: () => show('shelf'),
+});
+
 // enter()/leave() hooks, like OnEnable/OnDisable.
 const hooks = { record };
 
 function show(name) {
   hooks[current]?.leave();
+  clearTimeout(backOnItTimer);
+  if (name !== 'blue' && name !== 'playback') playback.stop();
   for (const [key, section] of Object.entries(screens)) section.hidden = key !== name;
   document.documentElement.style.setProperty('--vhs', String(VHS[name] ?? 0.5));
-  document.body.dataset.screen = name;
+  // data-current, not data-screen, so a [data-screen="…"] selector only ever matches a section.
+  document.body.dataset.current = name;
   current = name;
   if (name === 'shelf') drawShelf();
   hooks[name]?.enter();
@@ -48,11 +70,31 @@ function drawShelf() {
   screens.shelf.querySelector('[data-shelf-stamp]').textContent = formatVcrDate(today);
   renderShelf(screens.shelf.querySelector('[data-shelf]'), tapes, today, {
     onRecord: () => show('record'),
-    onSelect: () => {}, // Playback arrives in slice 2.
+    onSelect: selectTape,
   });
+}
+
+// READY plays, locked asks first, completed replays (spec.md > Tape Shelf).
+function selectTape(tape, state) {
+  if (state === 'ready') {
+    playback.startPlayback(tape, 'return');
+  } else if (state === 'completed') {
+    playback.startPlayback(tape, 'replay');
+  } else {
+    earlyTape = tape;
+    // Two fixed lines, so the date never breaks in the middle.
+    const line = (text) => Object.assign(document.createElement('span'), { className: 'early__line', textContent: text });
+    screens.early.querySelector('[data-early-text]')
+      .replaceChildren(line(`TAPE DUE ${formatVcrDate(tape.returnDate)}.`), ' ', line('PLAY EARLY?'));
+    show('early');
+  }
 }
 
 document.querySelector('[data-action="rec"]').addEventListener('click', () => show('record'));
 document.querySelector('[data-action="to-shelf"]').addEventListener('click', () => show('shelf'));
+document.querySelector('[data-action="early-play"]').addEventListener('click', () => playback.startPlayback(earlyTape, 'return'));
+document.querySelector('[data-action="early-cancel"]').addEventListener('click', () => show('shelf'));
+// BACK ON IT returns by itself after a few seconds, or right away when tapped.
+screens.backonit.addEventListener('click', () => show('shelf'));
 
 show('shelf');

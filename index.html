@@ -97,6 +97,57 @@
         </div>
       </section>
 
+      <!-- Early Play Confirmation: pressing a locked tape (prd.md > Early Play) -->
+      <section class="screen screen--early" data-screen="early" aria-label="Play early?" hidden>
+        <div class="saved">
+          <p class="early__text" data-early-text></p>
+          <div class="saved__actions">
+            <button class="btn btn--play" type="button" data-action="early-play">
+              <span class="ico ico--play" aria-hidden="true"></span>PLAY
+            </button>
+            <button class="btn" type="button" data-action="early-cancel">CANCEL</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Blue VCR Screen: the brief transition when a tape is played (prd.md > Playback) -->
+      <section class="screen screen--blue" data-screen="blue" aria-label="Loading tape" hidden>
+        <p class="blue__play"><span class="ico ico--play" aria-hidden="true"></span>PLAY</p>
+      </section>
+
+      <!-- Playback Screen: answers one by one, then the first step and timer (prd.md > Playback) -->
+      <section class="screen screen--playback" data-screen="playback" aria-label="Playing tape" hidden>
+        <header class="osd">
+          <span class="osd__play"><span class="ico ico--play" aria-hidden="true"></span>PLAY <span data-play-counter>0:00:00</span></span>
+          <span class="osd__stamp" data-play-title></span>
+        </header>
+        <ol class="answers" data-answers aria-live="polite"></ol>
+        <div class="first" data-first-step hidden>
+          <span class="answer__label">FIRST STEP WHEN I COME BACK</span>
+          <p class="first__text" data-first-text></p>
+          <div class="first__row">
+            <span class="timer" data-timer hidden>10:00</span>
+            <button class="btn btn--back" type="button" data-action="back-on-it" hidden>I'm back on it</button>
+          </div>
+        </div>
+        <footer class="osd osd--bottom osd--controls">
+          <button class="btn btn--quiet" type="button" data-action="play-stop">
+            <span class="ico ico--stop" aria-hidden="true"></span>STOP
+          </button>
+          <button class="btn" type="button" data-action="skip" aria-label="Skip to the first step">
+            <span class="ico ico--ff" aria-hidden="true"><span class="ico ico--play"></span><span class="ico ico--play"></span></span>
+          </button>
+        </footer>
+      </section>
+
+      <!-- Back On It Screen: the result, then back to the shelf (prd.md > First Step and Timer) -->
+      <section class="screen screen--backonit" data-screen="backonit" aria-label="Back on it" hidden>
+        <div class="saved">
+          <p class="saved__title backonit__text" data-backonit-text></p>
+          <p class="saved__label" data-backonit-label></p>
+        </div>
+      </section>
+
       <div class="vhs" aria-hidden="true"></div>
     </div>
   </main>

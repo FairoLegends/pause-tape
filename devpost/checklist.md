@@ -19,7 +19,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
   Learner check: Run `python -m http.server 8000` in the project folder and open `http://localhost:8000`. You should see the shelf in the CRT frame with the blank "Record your first tape" tape. Press ● REC, try ■ STOP with the first step empty (you should see "TAPE INCOMPLETE" and your typing should stay), then fill it in and save. Record a NO SIGNAL tape due 10 Jan 2027 and a second tape due today, close the tab, reopen it, and confirm both tapes are on the shelf, one locked with its day count and one READY in green.
   Commit: `Record tapes and show them on the shelf`
 
-- [ ] **2. Pressing ▶ plays your tape back and times your restart**
+- [x] **2. Pressing ▶ plays your tape back and times your restart**
   Becomes usable: Pressing ▶ on a READY tape shows the blue VCR screen, then the answers one by one, earlier ones staying on screen. Empty answers flash a blue "NO SIGNAL", and the first step comes last. The ▶ PLAY counter runs in a corner, and ▶▶ jumps straight to the first step. A 10:00 countdown starts beside "I'm back on it" and keeps counting as amber `+mm:ss` after zero. "I'm back on it" shows "BACK ON IT · N MIN" (minutes since ▶, rounded, minimum 1), and the shelf then shows that tape at the back with its minutes. A locked tape asks "TAPE DUE 10 JAN 2027. PLAY EARLY?" first. A completed tape replays without the timer or button, and its minutes never change. Closing the page mid-timer records nothing.
   Why now: This is the "rewind" half of the kernel, and the scope's "oh, that's cool" beat: your own words coming back, followed by the 10-minute first step. With slice 1 it completes the full pause-to-restart journey, so the early hands-on checkpoint happens here, while feedback can still shape the look and the remaining slices.
   PRD ref: `prd.md > The Core Journey` (steps 6–10), `prd.md > Playback`, `prd.md > First Step and Timer`, `prd.md > Early Play`, `prd.md > Replaying a Completed Tape`, `prd.md > States and Boundaries`
@@ -85,3 +85,4 @@ Activity mode: not started
 ## Revisions
 
 - The ● REC, ■ STOP, and ▶ symbols are drawn as small CSS shapes instead of typed characters — VT323 has no glyphs for ●, ■, or ▶ (checked in the font's character map), so typed symbols would fall back to a different font on each computer.
+- The Playback screen has a ■ STOP button that returns to the shelf without recording anything, the same as closing the page — a replayed tape shows no timer and no "I'm back on it" button, so without it there was no way back to the shelf.
