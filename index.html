@@ -90,14 +90,16 @@
         </form>
       </section>
 
-      <!-- Tape Saved Screen (prd.md > Calendar Reminder (.ics)); the calendar button arrives in slice 4 -->
+      <!-- Tape Saved Screen with the calendar file (prd.md > Calendar Reminder (.ics)) -->
       <section class="screen screen--saved" data-screen="saved" aria-label="Tape saved" hidden>
         <div class="saved">
           <p class="saved__title">TAPE SAVED</p>
           <p class="saved__label" data-saved-label></p>
           <div class="saved__actions">
+            <button class="btn btn--play" type="button" data-action="add-calendar">Add to calendar (.ics)</button>
             <button class="btn" type="button" data-action="to-shelf">BACK TO SHELF</button>
           </div>
+          <p class="saved__note" data-ics-note hidden></p>
         </div>
       </section>
 

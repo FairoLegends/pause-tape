@@ -39,7 +39,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
   Learner check: Open the Record Screen, then play a tape, and compare how strong the effect feels on each. Check that typing on the Record Screen is still comfortable. If you can, turn on Windows' "Animation effects: off" setting (Settings > Accessibility > Visual effects) and reload: the flicker and glitch should stop while the scanlines stay.
   Commit: `Add the VHS effect layer`
 
-- [ ] **4. Saving a tape gives you a calendar reminder with your first step**
+- [x] **4. Saving a tape gives you a calendar reminder with your first step**
   Becomes usable: The Tape Saved screen's "Add to calendar (.ics)" button downloads `pause-tape-<project>-<date>.ics`. Opening it in Outlook adds an all-day event on the return date, named after the project, with the first step in the description and an alarm at 08:00.
   Why now: This is the one piece that depends on an outside app, which is the biggest risk left in the plan. It sits after the full journey works so its findings can't block the kernel, and before the README so those findings get written down. The `.ics` is plain text, so the file itself is checked mechanically; only the Outlook and Android results need the learner's devices.
   PRD ref: `prd.md > Calendar Reminder (.ics)`, `prd.md > The Core Journey` (step 4)

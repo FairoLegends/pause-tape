@@ -9,6 +9,7 @@ import { initRecord } from './record.js';
 import { initPlayback, PACE } from './playback.js';
 import { startCrt } from './crt.js';
 import { switchIn } from './motion.js';
+import { downloadIcs } from './ics.js';
 
 // --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
 const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, blue: 1, playback: 1, backonit: 0.5 };
@@ -21,13 +22,16 @@ let tapes = loadTapes();
 let current = null;
 let earlyTape = null;
 let backOnItTimer = null;
+let savedTape = null;
 
 const record = initRecord(screens.record, {
   onSave(tape) {
     tapes = [...tapes, tape];
     saveTapes(tapes);
+    savedTape = tape;
     screens.saved.querySelector('[data-saved-label]').textContent =
       `${tape.project} · ${formatVcrDate(tape.returnDate)}`;
+    screens.saved.querySelector('[data-ics-note]').hidden = true;
     show('saved');
   },
   onBack: () => show('shelf'),
@@ -95,6 +99,14 @@ function selectTape(tape, state) {
 
 document.querySelector('[data-action="rec"]').addEventListener('click', () => show('record'));
 document.querySelector('[data-action="to-shelf"]').addEventListener('click', () => show('shelf'));
+// The calendar file is optional: the tape is already saved whether or not it's downloaded.
+document.querySelector('[data-action="add-calendar"]').addEventListener('click', () => {
+  if (!savedTape) return;
+  const name = downloadIcs(savedTape);
+  const note = screens.saved.querySelector('[data-ics-note]');
+  note.textContent = `SAVED ${name.toUpperCase()}`;
+  note.hidden = false;
+});
 document.querySelector('[data-action="early-play"]').addEventListener('click', () => playback.startPlayback(earlyTape, 'return'));
 document.querySelector('[data-action="early-cancel"]').addEventListener('click', () => show('shelf'));
 // BACK ON IT returns by itself after a few seconds, or right away when tapped.
