@@ -35,15 +35,26 @@ export function settleIn(node) {
   return gsap.from(node, { y: 6, opacity: 0, duration: 0.32, ease: 'power2.out', clearProps: 'transform,opacity' });
 }
 
-// Blue VCR screen: the loading bar fills across the screen's duration in steps, like
-// a tape counter, so the wait reads as "reading the tape".
+// Blue VCR screen: 20 equal cells light up one at a time across the screen's duration,
+// like a VCR reading the tape. Cells never change size, only switch on.
+const CELLS = 20;
 export function loadBar(barEl, seconds) {
   if (!barEl) return null;
+  if (barEl.children.length !== CELLS) {
+    barEl.replaceChildren(...Array.from({ length: CELLS }, () => Object.assign(document.createElement('span'), { className: 'blue__cell' })));
+  }
+  const cells = [...barEl.children];
+  if (gsap) gsap.killTweensOf(cells);
+  cells.forEach((c) => c.classList.remove('is-on'));
   if (!enabled()) {
-    barEl.style.setProperty('--load', '1');
+    cells.forEach((c) => c.classList.add('is-on'));
     return null;
   }
-  return gsap.fromTo(barEl, { '--load': 0 }, { '--load': 1, duration: seconds, ease: 'steps(12)' });
+  // The last cell lights just before the screen changes, so the bar reads as full.
+  const step = (seconds * 0.9) / CELLS;
+  const tl = gsap.timeline();
+  cells.forEach((c, i) => tl.call(() => c.classList.add('is-on'), null, (i + 1) * step));
+  return tl;
 }
 
 // Screen change: a quick vertical squash and brightness pop, like a CRT switching inputs.
