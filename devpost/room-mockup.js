@@ -266,13 +266,13 @@ const viewMat = new THREE.ShaderMaterial({
       #include <colorspace_fragment>
     }`,
 });
-const view = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.475), viewMat);
-view.position.set(fx, fy, WALL_Z - 1.4);
+const view = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.8), viewMat);
+view.position.set(-1.35, 1.59, WALL_Z - 1.4);
 scene.add(view);
 
 // The learner's AI pictures replace the placeholder when the files exist (ignored until then).
 const loader = new THREE.TextureLoader();
-for (const [file, key] of [['window-day.png', 'day'], ['window-night.png', 'night']]) {
+for (const [file, key] of [['window-day.jpg', 'day'], ['window-night.jpg', 'night']]) {
   loader.load(`../assets/room/${file}`, (t) => {
     t.colorSpace = THREE.SRGBColorSpace;
     viewMat.uniforms[key].value = t;
