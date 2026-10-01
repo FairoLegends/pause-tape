@@ -61,7 +61,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
 
 ## Hands-on Checkpoints
 
-- [ ] Early usable behavior explored — after slice 2, the full pause-to-restart journey works in the browser; the learner records, plays back, and times a restart, and gives feedback that can shape the VHS effect layer and the remaining slices
+- [x] Early usable behavior explored — after slice 2, the full pause-to-restart journey works in the browser; the learner records, plays back, and times a restart, and gives feedback that can shape the VHS effect layer and the remaining slices. Learner feedback: all five learner-check steps behaved as expected; the pacing (blue screen about 1.2 s, about 2.5 s between answers) feels right; the look is "still too plain" and needs polish, with shader.se as the visual reference; the VHS effect during playback should be clearly visible, "not too subtle and not too strong."
 - [ ] Calendar device test — after slice 4, the learner opens the `.ics` in Outlook and on their Android phone and reports what happened; the agent can't operate those apps, and the findings go into the README in slice 5
 - [ ] Final kick-the-tires exploration and feedback completed
 
