@@ -28,13 +28,23 @@ const scene = new THREE.Scene();
 // gives metal something to reflect, like URP's ambient probe.
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 40);
+const raycaster = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// Layout in metres: x to the right, y up, z toward the viewer. The back wall is at WALL_Z.
+// Left to right along the back wall: bookshelf (sofa in front of it), window, TV cabinet, plant.
+const WALL_Z = -2.0;
+const WIN = { x: -0.85, y: 1.9, w: 1.0, h: 0.95 }; // the sill plate (y 1.38..1.43) clears the TV top (~1.29)
+const fx = WIN.x;
+const fy = WIN.y;
+
 // Camera poses: the whole room, the room on a phone, and close to the TV once the shelf is open.
 const POSES = {
-  desktop: { pos: V(-0.3, 1.32, 1.3), look: V(-0.3, 1.02, -1.4) },
-  portrait: { pos: V(0.1, 1.25, 1.5), look: V(0.1, 1.0, -1.4) },
-  tv: { pos: V(0.02, 0.95, -0.05), look: V(0, 0.88, -1.16) },
+  desktop: { pos: V(-0.1, 1.45, 2.4), look: V(-0.1, 1.17, -1.4) },
+  portrait: { pos: V(0.0, 1.25, 2.9), look: V(0.0, 0.95, -1.4) },
+  tv: { pos: V(-0.3, 0.95, 0.0), look: V(-0.3, 0.93, -1.12) },
 };
 let wide = POSES.desktop;
 
@@ -75,7 +85,32 @@ function noiseFill(g, w, h, base, spread, alpha = 0.06) {
   }
 }
 
-// ── Room: floor, walls, window ────────────────────────────────────────
+// A small seeded random generator, so the books always stand the same way.
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+}
+
+// Glows, light shafts and other overlays must never catch a click.
+const NOOP = () => {};
+const noPick = (mesh) => { mesh.raycast = NOOP; return mesh; };
+
+// A group with userData.click is a button: the first solid thing under the pointer decides,
+// so a TV standing in front of the window blocks clicks on the curtain behind it.
+function makeClickable(root, name, onClick) {
+  root.userData.name = name;
+  root.userData.click = onClick;
+}
+function clickableAt(ndcX, ndcY) {
+  raycaster.setFromCamera(_ndc.set(ndcX, ndcY), camera);
+  const hits = raycaster.intersectObjects(scene.children, true);
+  if (!hits.length) return null;
+  for (let o = hits[0].object; o; o = o.parent) if (o.userData.click) return o;
+  return null;
+}
+const hitBox = (w, h, d) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ visible: false }));
+
+// ── Room: floor, walls ────────────────────────────────────────────────
 
 const wallTex = canvasTexture(512, 512, (g, w, h) => {
   noiseFill(g, w, h, '#cfc9ba', 255, 0.05);
@@ -89,8 +124,9 @@ wallTex.texture.repeat.set(3, 2);
 const wallMat = std(0xffffff, 0.95, 0, { map: wallTex.texture });
 
 const floorTex = canvasTexture(512, 512, (g, w, h) => {
+  const r = rng(3);
   for (let i = 0; i < 8; i++) { // wooden planks
-    const shade = 92 + Math.round(Math.random() * 26);
+    const shade = 92 + Math.round(r() * 26);
     g.fillStyle = `rgb(${shade + 30},${shade},${shade - 30})`;
     g.fillRect(0, (i * h) / 8, w, h / 8);
     g.fillStyle = 'rgba(0,0,0,0.35)';
@@ -110,9 +146,7 @@ ceiling.position.y = 2.7;
 scene.add(ceiling);
 
 // Back wall with a window opening (four boxes around the hole).
-const WALL_Z = -2.0;
-const WIN = { x: -0.95, y: 1.45, w: 1.1, h: 1.0 };
-const wallW = 6;
+const wallW = 5.2;
 const wallH = 2.7;
 const wt = 0.12;
 const leftW = (WIN.x - WIN.w / 2) + wallW / 2;
@@ -124,23 +158,30 @@ const topH = wallH - (WIN.y + WIN.h / 2);
 box(WIN.w, topH, wt, wallMat, WIN.x, wallH - topH / 2, WALL_Z);
 for (const sx of [-1, 1]) { // side walls
   const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(8, wallH), wallMat);
-  sideWall.position.set(sx * 3, wallH / 2, 2);
+  sideWall.position.set(sx * 2.6, wallH / 2, 2);
   sideWall.rotation.y = -sx * Math.PI / 2;
   sideWall.receiveShadow = true;
   scene.add(sideWall);
 }
 box(wallW, 0.1, 0.02, std(0xe9e4d8, 0.6), 0, 0.05, WALL_Z + 0.07); // baseboard
 
-// Window frame and glass.
+// ── Window: frame, glass, and the view outside ────────────────────────
+
+// Everything that belongs to the window is one button: clicking the frame, the glass or the
+// curtain opens or closes the curtain.
+const windowGroup = new THREE.Group();
+windowGroup.name = 'window';
+scene.add(windowGroup);
 const frameMat = std(0xf0ebdf, 0.55);
-const fx = WIN.x;
-const fy = WIN.y;
-box(WIN.w + 0.1, 0.06, 0.16, frameMat, fx, fy + WIN.h / 2 + 0.03, WALL_Z + 0.02);
-box(WIN.w + 0.16, 0.05, 0.26, frameMat, fx, fy - WIN.h / 2 - 0.02, WALL_Z + 0.08); // sill
-box(0.06, WIN.h + 0.1, 0.16, frameMat, fx - WIN.w / 2 - 0.03, fy, WALL_Z + 0.02);
-box(0.06, WIN.h + 0.1, 0.16, frameMat, fx + WIN.w / 2 + 0.03, fy, WALL_Z + 0.02);
-box(0.035, WIN.h, 0.06, frameMat, fx, fy, WALL_Z + 0.02); // mullion
-box(WIN.w, 0.035, 0.06, frameMat, fx, fy, WALL_Z + 0.02); // transom
+box(WIN.w + 0.1, 0.06, 0.16, frameMat, fx, fy + WIN.h / 2 + 0.03, WALL_Z + 0.02, windowGroup);
+box(WIN.w + 0.16, 0.05, 0.26, frameMat, fx, fy - WIN.h / 2 - 0.02, WALL_Z + 0.08, windowGroup); // sill
+box(0.06, WIN.h + 0.1, 0.16, frameMat, fx - WIN.w / 2 - 0.03, fy, WALL_Z + 0.02, windowGroup);
+box(0.06, WIN.h + 0.1, 0.16, frameMat, fx + WIN.w / 2 + 0.03, fy, WALL_Z + 0.02, windowGroup);
+box(0.035, WIN.h, 0.06, frameMat, fx, fy, WALL_Z + 0.02, windowGroup); // mullion
+box(WIN.w, 0.035, 0.06, frameMat, fx, fy, WALL_Z + 0.02, windowGroup); // transom
+const windowHit = new THREE.Mesh(new THREE.PlaneGeometry(WIN.w + 0.1, WIN.h + 0.1), new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }));
+windowHit.position.set(fx, fy, WALL_Z + 0.1);
+windowGroup.add(windowHit);
 
 // A soft diagonal sheen drawn on the glass (and later on the TV screen).
 const sheen = canvasTexture(256, 256, (g, w, h) => {
@@ -151,10 +192,10 @@ const sheen = canvasTexture(256, 256, (g, w, h) => {
   g.fillStyle = grd;
   g.fillRect(0, 0, w, h);
 });
-const glass = new THREE.Mesh(
+const glass = noPick(new THREE.Mesh(
   new THREE.PlaneGeometry(WIN.w, WIN.h),
   new THREE.MeshBasicMaterial({ map: sheen.texture, transparent: true, opacity: 0.7, depthWrite: false }),
-);
+));
 glass.position.set(fx, fy, WALL_Z + 0.03);
 scene.add(glass);
 
@@ -171,86 +212,25 @@ const glowTex = canvasTexture(256, 256, (g, w, h) => {
 const glowMat = new THREE.MeshBasicMaterial({
   map: glowTex.texture, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false,
 });
-const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 3.4), glowMat);
+const glow = noPick(new THREE.Mesh(new THREE.PlaneGeometry(4.0, 3.4), glowMat));
 glow.position.set(fx, fy, WALL_Z + 0.07);
 scene.add(glow);
 
-// One curtain on the left, on a rod.
-const curtainTex = canvasTexture(256, 512, (g, w, h) => {
-  const grd = g.createLinearGradient(0, 0, w, 0);
-  for (let i = 0; i <= 8; i++) grd.addColorStop(i / 8, i % 2 ? '#c9b99a' : '#a99a7c');
-  g.fillStyle = grd;
-  g.fillRect(0, 0, w, h);
-});
-const curtain = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.36, 1.6),
-  std(0xffffff, 0.95, 0, { map: curtainTex.texture, side: THREE.DoubleSide }),
-);
-curtain.position.set(fx - WIN.w / 2 - 0.2, 1.42, WALL_Z + 0.16);
-curtain.castShadow = true;
-scene.add(curtain);
-box(1.5, 0.02, 0.02, std(0x3a3328, 0.4, 0.6), fx - 0.1, 2.2, WALL_Z + 0.14);
-
-// ── The view outside the window (placeholder until the learner's pictures) ──
-
+// The view outside: the learner's two AI pictures (semi-cartoon street, seen side-on across
+// the road). Until they load, a drawn placeholder stands in.
 function drawView(g, w, h, night) {
   const sky = g.createLinearGradient(0, 0, 0, h);
-  if (night) {
-    sky.addColorStop(0, '#0b1430');
-    sky.addColorStop(1, '#1d2b52');
-  } else {
-    sky.addColorStop(0, '#7fb8e8');
-    sky.addColorStop(1, '#d8ecf7');
-  }
+  sky.addColorStop(0, night ? '#1a2350' : '#7fb8e8');
+  sky.addColorStop(1, night ? '#33407a' : '#d8ecf7');
   g.fillStyle = sky;
   g.fillRect(0, 0, w, h);
-  if (night) {
-    g.fillStyle = 'rgba(235,240,255,0.95)';
-    g.beginPath();
-    g.arc(w * 0.72, h * 0.22, h * 0.07, 0, Math.PI * 2);
-    g.fill();
-    for (let i = 0; i < 60; i++) {
-      g.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.6})`;
-      g.fillRect(Math.random() * w, Math.random() * h * 0.5, 1.5, 1.5);
-    }
-  } else {
-    g.fillStyle = 'rgba(255,255,255,0.75)';
-    for (const [cx, cy, r] of [[0.25, 0.2, 0.08], [0.33, 0.18, 0.1], [0.42, 0.21, 0.07], [0.78, 0.3, 0.06], [0.85, 0.28, 0.08]]) {
-      g.beginPath();
-      g.arc(cx * w, cy * h, r * h, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
-  const houses = [[0.02, 0.18, 0.62], [0.22, 0.2, 0.55], [0.44, 0.18, 0.6], [0.64, 0.22, 0.52], [0.86, 0.17, 0.58]];
-  for (const [x, hw, top] of houses) {
-    const X = x * w;
-    const W = hw * w;
-    const T0 = top * h;
-    g.fillStyle = night ? '#1a2136' : '#c9b79a';
-    g.fillRect(X, T0, W, h - T0);
-    g.fillStyle = night ? '#121726' : '#8b4b3a';
-    g.beginPath();
-    g.moveTo(X - 6, T0);
-    g.lineTo(X + W / 2, T0 - h * 0.1);
-    g.lineTo(X + W + 6, T0);
-    g.closePath();
-    g.fill();
-    for (let k = 0; k < 2; k++) {
-      g.fillStyle = night ? (Math.random() > 0.35 ? '#ffcf7a' : '#2a3150') : '#5c6f80';
-      g.fillRect(X + W * (0.18 + k * 0.42), T0 + (h - T0) * 0.25, W * 0.22, (h - T0) * 0.22);
-    }
-  }
-  for (let i = 0; i < 7; i++) {
-    g.fillStyle = night ? '#0d1a14' : '#3f6b3a';
-    g.beginPath();
-    g.arc((i / 6) * w, h * 0.86, h * 0.09, 0, Math.PI * 2);
-    g.fill();
-  }
-  g.fillStyle = night ? '#0a0f18' : '#6d6a63';
-  g.fillRect(0, h * 0.9, w, h * 0.1);
+  g.fillStyle = night ? '#1f2a2a' : '#5b8c4a';
+  g.fillRect(0, h * 0.72, w, h * 0.28);
+  g.fillStyle = night ? '#232a3a' : '#9aa0a8';
+  g.fillRect(0, h * 0.8, w, h * 0.14);
 }
-const viewDay = canvasTexture(1024, 576, (g, w, h) => drawView(g, w, h, false));
-const viewNight = canvasTexture(1024, 576, (g, w, h) => drawView(g, w, h, true));
+const viewDay = canvasTexture(512, 384, (g, w, h) => drawView(g, w, h, false));
+const viewNight = canvasTexture(512, 384, (g, w, h) => drawView(g, w, h, true));
 
 // The view sits behind the wall, so it shifts against the frame when the camera moves (real
 // parallax). A raw shader draws it as a bright picture; the colour-space line keeps it correct.
@@ -266,28 +246,87 @@ const viewMat = new THREE.ShaderMaterial({
       #include <colorspace_fragment>
     }`,
 });
-const view = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.8), viewMat);
-view.position.set(-1.35, 1.59, WALL_Z - 1.4);
+const VIEW_W = 2.7;
+const view = noPick(new THREE.Mesh(new THREE.PlaneGeometry(VIEW_W, VIEW_W * 0.75), viewMat));
+function placeView(aspect) { // centre the picture on the window's line of sight from the home camera
+  const home = POSES.desktop.pos;
+  const planeZ = WALL_Z - 1.4;
+  const kk = (planeZ - home.z) / (WALL_Z - home.z);
+  view.scale.set(1, 1 / aspect / 0.75, 1);
+  view.position.set(home.x + (fx - home.x) * kk, home.y + (fy - home.y) * kk - 0.03, planeZ);
+}
+placeView(4 / 3);
 scene.add(view);
 
-// The learner's AI pictures replace the placeholder when the files exist (ignored until then).
 const loader = new THREE.TextureLoader();
 for (const [file, key] of [['window-day.jpg', 'day'], ['window-night.jpg', 'night']]) {
   loader.load(`../assets/room/${file}`, (t) => {
     t.colorSpace = THREE.SRGBColorSpace;
     viewMat.uniforms[key].value = t;
+    if (key === 'day') placeView(t.image.width / t.image.height);
   }, undefined, () => {});
 }
 
-// ── Furniture: low cabinet with the TV and VCR, side table with can and photo ──
+// ── Curtain: two pleated panels on a rod; a click slides them shut or open ──
+
+const ROD = { x0: fx - WIN.w / 2 - 0.22, x1: fx + WIN.w / 2 + 0.22, y: WIN.y + WIN.h / 2 + 0.12 };
+const CURTAIN_Z = WALL_Z + 0.3; // in front of the sill (it reaches WALL_Z + 0.21) even in the pleat troughs (0.3 - 0.045)
+const CURTAIN_TOP = ROD.y - 0.03;
+const CURTAIN_BOTTOM = fy - WIN.h / 2 - 0.12;
+const PANEL_OPEN = 0.17;
+const PANEL_CLOSED = (ROD.x1 - ROD.x0) / 2 + 0.03;
+
+const curtainTex = canvasTexture(256, 512, (g, w, h) => {
+  const grd = g.createLinearGradient(0, 0, w, 0);
+  for (let i = 0; i <= 10; i++) grd.addColorStop(i / 10, i % 2 ? '#e6d8b8' : '#cdbb94');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(120,90,50,0.35)'; // a hem
+  g.fillRect(0, h - 26, w, 26);
+});
+const curtainMat = std(0xffffff, 0.95, 0, { map: curtainTex.texture, side: THREE.DoubleSide, emissive: 0x000000 });
+function curtainPanel(side) { // side -1 = left panel (anchored at the rod's left end), +1 = right panel
+  const geo = new THREE.PlaneGeometry(1, CURTAIN_TOP - CURTAIN_BOTTOM, 56, 1);
+  geo.translate(side < 0 ? 0.5 : -0.5, 0, 0); // the anchored edge sits at x = 0
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) { // pleats: a sine wave across the width
+    const u = side < 0 ? pos.getX(i) : -pos.getX(i); // 0 at the rod end, 1 at the free edge
+    pos.setZ(i, 0.045 * Math.sin(u * Math.PI * 2 * 7));
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, curtainMat);
+  m.position.set(side < 0 ? ROD.x0 : ROD.x1, (CURTAIN_TOP + CURTAIN_BOTTOM) / 2, CURTAIN_Z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  windowGroup.add(m);
+  return m;
+}
+const curtainL = curtainPanel(-1);
+const curtainR = curtainPanel(1);
+const brass = std(0xb8964a, 0.35, 0.8);
+box(ROD.x1 - ROD.x0 + 0.1, 0.025, 0.025, brass, (ROD.x0 + ROD.x1) / 2, ROD.y, CURTAIN_Z, windowGroup);
+for (const ex of [ROD.x0 - 0.06, ROD.x1 + 0.06]) {
+  const finial = new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), brass);
+  finial.position.set(ex, ROD.y, CURTAIN_Z);
+  windowGroup.add(finial);
+}
+
+let curtainTarget = 1; // 1 = open, 0 = closed
+let curtainAmount = 1; // what is on screen (eased)
+let curtainOpen = 1; // the same, smoothed again for the look
+const toggleCurtain = () => { curtainTarget = curtainTarget > 0.5 ? 0 : 1; };
+makeClickable(windowGroup, 'window', toggleCurtain);
+
+// ── Furniture: TV cabinet (centre), bookshelf and sofa (left), lamp (right) ──
 
 const woodTex = canvasTexture(256, 256, (g, w, h) => {
+  const r = rng(11);
   g.fillStyle = '#7a5637';
   g.fillRect(0, 0, w, h);
   for (let i = 0; i < 90; i++) {
-    g.strokeStyle = `rgba(30,15,5,${0.05 + Math.random() * 0.1})`;
+    g.strokeStyle = `rgba(30,15,5,${0.05 + r() * 0.1})`;
     g.beginPath();
-    const y = Math.random() * h;
+    const y = r() * h;
     g.moveTo(0, y);
     g.bezierCurveTo(w * 0.3, y + 6, w * 0.6, y - 6, w, y + 3);
     g.stroke();
@@ -295,21 +334,24 @@ const woodTex = canvasTexture(256, 256, (g, w, h) => {
 });
 const woodMat = std(0xffffff, 0.6, 0, { map: woodTex.texture });
 
+const CAB_W = 2.2;
 const cab = new THREE.Group();
 cab.name = 'cabinet';
-cab.position.set(0.15, 0, -1.42);
+cab.position.set(0, 0, -1.42);
 scene.add(cab);
-box(1.75, 0.5, 0.55, woodMat, 0, 0.25, 0, cab, 0.012);
-box(1.77, 0.03, 0.57, woodMat, 0, 0.515, 0, cab, 0.012);
-for (const dx of [-0.43, 0.43]) { // cabinet doors
-  box(0.84, 0.38, 0.012, std(0x684730, 0.6), dx, 0.25, 0.28, cab);
-  box(0.12, 0.018, 0.02, std(0xb8a77a, 0.3, 0.8), dx + (dx < 0 ? 0.34 : -0.34), 0.25, 0.295, cab);
+const cabBody = box(CAB_W, 0.5, 0.55, woodMat, 0, 0.25, 0, cab, 0.012);
+box(CAB_W + 0.02, 0.03, 0.57, woodMat, 0, 0.515, 0, cab, 0.012);
+for (const dx of [-0.72, 0, 0.72]) { // cabinet doors
+  box(0.68, 0.38, 0.012, std(0x684730, 0.6), dx, 0.25, 0.28, cab);
+  box(0.1, 0.018, 0.02, std(0xb8a77a, 0.3, 0.8), dx + (dx <= 0 ? 0.24 : -0.24), 0.25, 0.295, cab);
 }
 
-// CRT TV: a deep body, a bezel, and the screen (the app lives here later).
+// CRT TV: a deep body, a bezel, and the screen (the app lives here later). A little bigger
+// than life so it stays the hero of the room.
 const tv = new THREE.Group();
 tv.name = 'tv';
-tv.position.set(-0.15, 0.53, -0.02);
+tv.position.set(-0.3, 0.53, -0.02);
+tv.scale.setScalar(1.2);
 cab.add(tv);
 const tvBody = std(0x24262c, 0.45, 0.1);
 box(0.82, 0.62, 0.55, tvBody, 0, 0.31, -0.04, tv, 0.03);
@@ -336,17 +378,16 @@ for (let i = 0; i < 4; i++) box(0.5, 0.006, 0.006, std(0x111215, 0.8), 0, 0.03 +
 box(0.012, 0.012, 0.01, new THREE.MeshBasicMaterial({ color: 0xff3b3b }), 0.37, 0.04, 0.279, tv); // power LED
 
 // The screen glows onto the room, strongest at night. A point light held in front of the glass,
-// so it reaches the VCR, the cabinet top, the floor and the side table without a hot spot on
-// the TV's own body.
+// so it reaches the VCR, the cabinet top and the floor without a hot spot on the TV's own body.
 const tvLight = new THREE.PointLight(0x6f8cff, 0, 5, 2);
-tvLight.position.set(0.05, 0.95, -0.7);
+tvLight.position.set(-0.3, 0.95, -0.7);
 scene.add(tvLight);
 
-// VCR on the cabinet, beside the TV: the clickable object.
+// VCR on the cabinet, right of the TV: the clickable object.
 const VCR_Y = 0.53;
 const vcr = new THREE.Group();
 vcr.name = 'vcr';
-vcr.position.set(0.55, VCR_Y, 0.02);
+vcr.position.set(0.52, VCR_Y, 0.02);
 cab.add(vcr);
 const vcrShell = box(0.5, 0.1, 0.36, std(0x2b2d33, 0.4, 0.25), 0, 0.05, 0, vcr, 0.012);
 box(0.3, 0.025, 0.01, std(0x0c0d10, 0.3), -0.06, 0.06, 0.182, vcr); // tape slot
@@ -359,14 +400,15 @@ vcr.add(vcrScreen);
 const vcrLedMat = new THREE.MeshBasicMaterial({ color: 0x62ff8f, toneMapped: false });
 box(0.014, 0.014, 0.01, vcrLedMat, 0.225, 0.03, 0.181, vcr);
 // An invisible, more generous box so the VCR is easy to click (a Collider in Unity terms).
-const vcrHit = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.18, 0.46), new THREE.MeshBasicMaterial({ visible: false }));
+const vcrHit = hitBox(0.56, 0.18, 0.44);
 vcrHit.position.set(0, 0.09, 0.03);
 vcr.add(vcrHit);
 const vcrGlow = new THREE.PointLight(0x62ff8f, 0, 0.9, 2);
-vcrGlow.position.set(0.7, 0.58, -1.0);
+vcrGlow.position.set(0.52, 0.6, -1.0);
 scene.add(vcrGlow);
 
-// Photo frame on the cabinet, just left of the TV (a fixed photo; placeholder until the learner's photo arrives).
+// Photo frame on the cabinet, just left of the TV. The picture is a slot: "YOUR PHOTO" until
+// the player's own photo goes in (a later feature).
 const photo = canvasTexture(256, 320, (g, w, h) => {
   const grd = g.createLinearGradient(0, 0, 0, h);
   grd.addColorStop(0, '#2a3a5c');
@@ -381,7 +423,7 @@ const photo = canvasTexture(256, 320, (g, w, h) => {
 });
 const frame = new THREE.Group();
 frame.name = 'frame';
-frame.position.set(-0.71, 0.53, 0.05);
+frame.position.set(-0.98, 0.53, 0.05);
 frame.rotation.y = 0.3; // turned a little toward the camera
 frame.scale.setScalar(1.12);
 cab.add(frame);
@@ -390,14 +432,227 @@ const pic = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.17), std(0xffffff, 0.
 pic.position.set(0, 0.1, 0.0085);
 frame.add(pic);
 box(0.02, 0.18, 0.02, std(0x2b2018, 0.5), 0, 0.08, -0.05, frame).rotation.x = -0.35; // easel leg
-loader.load('../assets/room/photo.jpg', (t) => { t.colorSpace = THREE.SRGBColorSpace; pic.material.map = t; pic.material.needsUpdate = true; }, undefined, () => {});
+
+// Photo slot: "YOUR PHOTO" until the player picks a picture of their own. The picture is cropped to
+// fill the frame, shrunk, and kept only in this browser (localStorage); it is never uploaded.
+const PHOTO_KEY = 'pausetape.photo.v1';
+const photoInput = document.querySelector('[data-photo-input]');
+const photoRemove = document.querySelector('[data-photo-remove]');
+const emptyPhoto = pic.material.map;
+let hasPhoto = false;
+let photoSize = { w: 0, h: 0 };
+function showPhoto(dataUrl) {
+  loader.load(dataUrl, (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    pic.material.map = t;
+    pic.material.needsUpdate = true;
+    hasPhoto = true;
+    photoSize = { w: t.image.width, h: t.image.height };
+    photoRemove.hidden = false;
+  });
+}
+function clearPhoto() {
+  pic.material.map = emptyPhoto;
+  pic.material.needsUpdate = true;
+  hasPhoto = false;
+  photoRemove.hidden = true;
+  try { localStorage.removeItem(PHOTO_KEY); } catch { /* storage may be blocked */ }
+}
+async function cropToFrame(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const W = 384;
+  const H = 502; // the picture area is 0.13 x 0.17 m
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const sc = Math.max(W / bmp.width, H / bmp.height); // "cover": fill the frame, crop the overflow
+  c.getContext('2d').drawImage(bmp, (W - bmp.width * sc) / 2, (H - bmp.height * sc) / 2, bmp.width * sc, bmp.height * sc);
+  bmp.close();
+  return c.toDataURL('image/jpeg', 0.85);
+}
+photoInput.addEventListener('change', async () => {
+  const file = photoInput.files[0];
+  photoInput.value = ''; // so picking the same file again still fires
+  if (!file) return;
+  try {
+    const url = await cropToFrame(file);
+    showPhoto(url);
+    try { localStorage.setItem(PHOTO_KEY, url); } catch { /* blocked or full: it still shows for this visit */ }
+  } catch { /* not a picture the browser can read: the frame stays as it was */ }
+});
+photoRemove.addEventListener('click', clearPhoto);
+try { const saved = localStorage.getItem(PHOTO_KEY); if (saved) showPhoto(saved); } catch { /* ignore */ }
+const frameHit = hitBox(0.3, 0.32, 0.16);
+frameHit.position.set(0, 0.11, 0);
+frame.add(frameHit);
+makeClickable(frame, 'frame', () => photoInput.click());
+
+// Table lamp at the right end of the cabinet: on in the evening and at night, and a click
+// switches it on or off.
+const lamp = new THREE.Group();
+lamp.name = 'lamp';
+lamp.position.set(0.95, 0.53, 0.0);
+cab.add(lamp);
+const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.05, 24), brass);
+lampBase.position.y = 0.025;
+const lampStem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 12), brass);
+lampStem.position.y = 0.21;
+lampBase.castShadow = lampStem.castShadow = true;
+const shadeMat = new THREE.MeshStandardMaterial({ color: 0xf1e2c0, roughness: 0.9, side: THREE.DoubleSide, emissive: 0xffc270, emissiveIntensity: 0.1 });
+const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.15, 0.21, 28, 1, true), shadeMat);
+lampShade.position.y = 0.43;
+const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffd99a, toneMapped: false }));
+bulb.position.y = 0.37;
+const lampLight = new THREE.PointLight(0xffb866, 0, 5, 2);
+lampLight.position.set(0, 0.4, 0.02);
+const lampGlowSprite = noPick(new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex.texture, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, color: 0xffb866, opacity: 0,
+})));
+lampGlowSprite.position.y = 0.42;
+lampGlowSprite.scale.setScalar(0.85);
+const lampHit = hitBox(0.3, 0.6, 0.3);
+lampHit.position.y = 0.3;
+lamp.add(lampBase, lampStem, lampShade, bulb, lampLight, lampGlowSprite, lampHit);
+let lampOverride = null; // null = follows the time of day; true/false = the player's choice
+const toggleLamp = () => { lampOverride = !(lampOverride === null ? lampState().auto > 0.5 : lampOverride); };
+makeClickable(lamp, 'lamp', toggleLamp);
+
+// Bookshelf against the back wall, left of the window: open shelves with books.
+function makeBookshelf() {
+  const g = new THREE.Group();
+  g.name = 'bookshelf';
+  const W = 0.8;
+  const H = 2.0;
+  const D = 0.3;
+  const T = 0.035;
+  g.position.set(-1.95, 0, WALL_Z + wt / 2 + D / 2);
+  scene.add(g);
+  const wood = std(0x8f6a42, 0.7);
+  box(T, H, D, wood, -W / 2 + T / 2, H / 2, 0, g);
+  box(T, H, D, wood, W / 2 - T / 2, H / 2, 0, g);
+  box(W - 2 * T, H, 0.012, std(0x6a4a2c, 0.85), 0, H / 2, -D / 2 + 0.01, g);
+  const boards = [0.02, 0.44, 0.86, 1.28, 1.69, H - 0.015];
+  for (const y of boards) box(W, 0.03, D, wood, 0, y, 0, g);
+
+  const rand = rng(7);
+  const palette = [0xb9483c, 0xd18b3a, 0x3f7f86, 0x2f4f7a, 0xe3d6b4, 0x6a8f4e, 0x8d4a6a, 0xc9a24a];
+  const items = [];
+  for (let s = 0; s < boards.length - 1; s++) {
+    const floorY = boards[s] + 0.015;
+    const maxH = boards[s + 1] - 0.015 - floorY - 0.02;
+    const fill = s === 2 ? 0.55 : 0.92; // one shelf is half empty, like a real one
+    const xEnd = W / 2 - T - 0.015;
+    let x = -W / 2 + T + 0.015;
+    while (x < xEnd - 0.03) {
+      const w = 0.028 + rand() * 0.03;
+      if (x + w > xEnd) break;
+      if (rand() > fill) { x += 0.05 + rand() * 0.06; continue; } // a gap
+      const h = Math.min(maxH, 0.2 + rand() * 0.14);
+      const d = 0.18 + rand() * 0.06;
+      const lean = rand() > 0.93 ? (rand() > 0.5 ? 0.22 : -0.22) : 0;
+      items.push({ x: x + w / 2, y: floorY + h / 2, z: D / 2 - 0.03 - d / 2, w, h, d, lean, c: palette[Math.floor(rand() * palette.length)] });
+      x += w + 0.003 + (lean ? 0.03 : 0);
+    }
+  }
+  const books = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), std(0xffffff, 0.75), items.length);
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const col = new THREE.Color();
+  items.forEach((b, i) => {
+    m4.compose(V(b.x, b.y, b.z), q.setFromEuler(e.set(0, 0, b.lean)), V(b.w, b.h, b.d));
+    books.setMatrixAt(i, m4);
+    books.setColorAt(i, col.set(b.c));
+  });
+  books.instanceMatrix.needsUpdate = true;
+  books.instanceColor.needsUpdate = true;
+  books.castShadow = true;
+  books.receiveShadow = true;
+  g.add(books);
+  return g;
+}
+const bookshelf = makeBookshelf();
+
+// Sofa in front of the bookshelf, facing the room. Rounded shapes keep it semi-cartoon.
+function makeSofa() {
+  const g = new THREE.Group();
+  g.name = 'sofa';
+  g.position.set(-1.72, 0, -1.26);
+  scene.add(g);
+  const fabric = std(0x3e7c80, 0.92);
+  const cushion = std(0x4a8c90, 0.92);
+  const leg = std(0x4a3222, 0.6);
+  for (const [lx, lz] of [[-0.44, -0.29], [0.44, -0.29], [-0.44, 0.29], [0.44, 0.29]]) box(0.05, 0.1, 0.05, leg, lx, 0.05, lz, g);
+  box(1.0, 0.22, 0.72, fabric, 0, 0.21, 0, g, 0.05); // base
+  box(1.0, 0.5, 0.18, fabric, 0, 0.6, -0.27, g, 0.06); // back
+  for (const ax of [-0.43, 0.43]) box(0.14, 0.4, 0.72, fabric, ax, 0.5, 0, g, 0.06); // arms
+  for (const cx of [-0.2, 0.2]) box(0.38, 0.13, 0.5, cushion, cx, 0.39, 0.08, g, 0.05); // seat cushions
+  for (const cx of [-0.2, 0.2]) box(0.38, 0.34, 0.12, cushion, cx, 0.61, -0.14, g, 0.05).rotation.x = -0.2; // back cushions
+  box(0.24, 0.24, 0.09, std(0xb5654a, 0.9), 0.3, 0.55, -0.02, g, 0.04).rotation.set(-0.1, -0.35, 0.15); // a pillow
+  return g;
+}
+const sofa = makeSofa();
+
+// A rug under the sofa and in front of the cabinet, so the floor isn't a bare plank field.
+const rugTex = canvasTexture(512, 320, (g, w, h) => {
+  g.fillStyle = '#b4624a';
+  g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#efe3c8';
+  g.lineWidth = 10;
+  g.strokeRect(14, 14, w - 28, h - 28);
+  g.strokeStyle = '#7d3f30';
+  g.lineWidth = 4;
+  g.strokeRect(34, 34, w - 68, h - 68);
+  g.fillStyle = '#efe3c8';
+  for (let i = 0; i < 9; i++) {
+    const cx = 70 + i * 46;
+    const cy = h / 2;
+    g.globalAlpha = i % 2 ? 0.9 : 0.55;
+    g.beginPath();
+    g.moveTo(cx, cy - 22);
+    g.lineTo(cx + 22, cy);
+    g.lineTo(cx, cy + 22);
+    g.lineTo(cx - 22, cy);
+    g.closePath();
+    g.fill();
+  }
+});
+const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.8), std(0xffffff, 1, 0, { map: rugTex.texture }));
+rug.rotation.x = -Math.PI / 2;
+rug.position.set(-0.5, 0.006, -0.6);
+rug.receiveShadow = true;
+scene.add(rug);
+
+// A floor plant on the right balances the sofa on the left.
+const plant = new THREE.Group();
+plant.name = 'plant';
+plant.position.set(1.8, 0, -1.55);
+plant.scale.setScalar(1.15);
+scene.add(plant);
+const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.28, 24), std(0x9a5b3c, 0.8));
+pot.position.y = 0.14;
+pot.castShadow = true;
+plant.add(pot);
+{
+  const r = rng(5);
+  for (let i = 0; i < 11; i++) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), std(i % 2 ? 0x2f5d33 : 0x3f7a40, 0.9));
+    leaf.scale.set(0.5, 1.5, 0.25);
+    const a = (i / 11) * Math.PI * 2;
+    leaf.position.set(Math.cos(a) * 0.1, 0.5 + r() * 0.22, Math.sin(a) * 0.1);
+    leaf.rotation.set(Math.sin(a) * 0.5, a, Math.cos(a) * 0.5);
+    leaf.castShadow = true;
+    plant.add(leaf);
+  }
+}
 
 // ── Lights ────────────────────────────────────────────────────────────
 
 // One direction for everything that is "the sun": the light itself, the visible shafts and the
 // disc seen in the window. It travels from the window's upper left toward the lower right.
 const SUN_DIR = V(0.66, -0.4, 0.64).normalize();
-const SUN_AIM = V(-0.1, 0.55, -0.9);
+const SUN_AIM = V(fx + 0.5, 0.7, -1.0);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x3a2a1f, 1);
 scene.add(hemi);
@@ -406,15 +661,15 @@ sun.position.copy(SUN_AIM).addScaledVector(SUN_DIR, -9); // behind the wall; the
 sun.target.position.copy(SUN_AIM);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.5, far: 20 });
+Object.assign(sun.shadow.camera, { left: -3.5, right: 3.5, top: 3.5, bottom: -3.5, near: 0.5, far: 20 });
 sun.shadow.camera.updateProjectionMatrix();
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
 
 // The sun you can see in the window (upper left), and soft shafts of light leaving the window
-// along SUN_DIR. The disc is placed so it appears at the window's upper left from the home camera;
-// it sits behind the wall, so it shifts a little when the camera turns, like the view does.
+// along SUN_DIR. The disc sits behind the wall, so it shifts a little when the camera turns,
+// like the view does.
 const sunTex = canvasTexture(256, 256, (g, w, h) => {
   const grd = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
   grd.addColorStop(0, 'rgba(255,255,255,1)');
@@ -425,25 +680,25 @@ const sunTex = canvasTexture(256, 256, (g, w, h) => {
   g.fillStyle = grd;
   g.fillRect(0, 0, w, h);
 });
-const sunDisc = new THREE.Sprite(new THREE.SpriteMaterial({
+const sunDisc = noPick(new THREE.Sprite(new THREE.SpriteMaterial({
   map: sunTex.texture, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
-}));
+})));
 {
   const home = POSES.desktop.pos;
   const inWindow = V(fx - 0.36, fy + 0.33, WALL_Z); // where the sun should appear inside the opening
-  const k = (WALL_Z - 1.0 - home.z) / (inWindow.z - home.z);
-  sunDisc.position.copy(home).addScaledVector(inWindow.clone().sub(home), k);
+  const kk = (WALL_Z - 1.0 - home.z) / (inWindow.z - home.z);
+  sunDisc.position.copy(home).addScaledVector(inWindow.clone().sub(home), kk);
 }
 scene.add(sunDisc);
 
-// One soft ribbon per shaft: bright in the middle, fading at the sides, at the window end and at
-// the far end. (The canvas is drawn bottom-up because texture rows run upward.)
+// One soft ribbon per ray: bright in the middle, fading at the sides, at the window end and well
+// before the far end. (The canvas is drawn bottom-up because texture rows run upward.)
 const shaftTex = canvasTexture(64, 256, (g, w, h) => {
   const img = g.createImageData(w, h);
   const ease = (lo, hi, x) => { const t = Math.min(1, Math.max(0, (x - lo) / (hi - lo))); return t * t * (3 - 2 * t); };
   for (let y = 0; y < h; y++) {
     const along = 1 - y / (h - 1); // 0 at the window end, 1 at the far end
-    const lengthwise = ease(0, 0.12, along) * (1 - ease(0.4, 1, along));
+    const lengthwise = ease(0, 0.08, along) * (1 - ease(0.36, 1, along));
     for (let x = 0; x < w; x++) {
       const across = Math.abs((2 * x) / (w - 1) - 1);
       const a = lengthwise * Math.pow(1 - ease(0, 1, across), 1.7);
@@ -454,12 +709,15 @@ const shaftTex = canvasTexture(64, 256, (g, w, h) => {
   }
   g.putImageData(img, 0, 0);
 });
-const SHAFTS = [ // start inside the window (metres from its centre), width, length, strength, breathing phase
-  { u: -0.38, v: 0.3, w: 0.2, len: 2.0, k: 1.0, ph: 0 },
-  { u: -0.16, v: 0.14, w: 0.15, len: 1.8, k: 0.85, ph: 1.7 },
-  { u: 0.08, v: -0.02, w: 0.24, len: 1.9, k: 0.9, ph: 3.1 },
-  { u: -0.4, v: -0.14, w: 0.12, len: 1.5, k: 0.6, ph: 4.4 },
-  { u: 0.28, v: -0.24, w: 0.16, len: 1.5, k: 0.6, ph: 5.6 },
+// Four rays that start beside the sun and fan out (fan = turn in the picture, radians; negative =
+// steeper), like the learner's drawing. They leave the window, cross the wall and fade out; the TV
+// stands in front of them, so none can land on its screen.
+// Fields: start inside the window (metres from its centre), width, length, strength, breathing phase.
+const SHAFTS = [
+  { u: -0.34, v: 0.3, fan: 0.05, w: 0.22, len: 2.5, k: 1.0, ph: 0 },
+  { u: -0.26, v: 0.26, fan: -0.08, w: 0.17, len: 2.3, k: 0.9, ph: 1.7 },
+  { u: -0.3, v: 0.2, fan: -0.2, w: 0.14, len: 2.0, k: 0.75, ph: 3.1 },
+  { u: -0.36, v: 0.12, fan: -0.33, w: 0.11, len: 1.7, k: 0.6, ph: 4.4 },
 ];
 const shafts = SHAFTS.map((d) => {
   const geo = new THREE.PlaneGeometry(1, 1);
@@ -468,31 +726,33 @@ const shafts = SHAFTS.map((d) => {
     map: shaftTex.texture, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
     toneMapped: false, side: THREE.DoubleSide, opacity: 0,
   });
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = noPick(new THREE.Mesh(geo, mat));
   mesh.position.set(fx + d.u, fy + d.v, WALL_Z + 0.06);
   mesh.scale.set(d.w, d.len, 1);
   mesh.renderOrder = 2;
   scene.add(mesh);
-  return { ...d, mesh, mat };
+  return { ...d, mesh, mat, dir: SUN_DIR.clone() };
 });
 const _n = V(0, 0, 0);
 const _x = V(0, 0, 0);
 const _basis = new THREE.Matrix4();
-function aimShaft(mesh) {
-  // Turn the ribbon around its own axis (the light direction) so its flat side faces the camera.
-  _n.copy(camera.position).sub(mesh.position);
+function aimShaft(d) {
+  // Turn the ribbon around its own axis (the light direction) so its flat side faces the camera,
+  // then tilt it by its fan angle in the picture so the rays spread out from the sun.
+  _n.copy(camera.position).sub(d.mesh.position);
   _n.addScaledVector(SUN_DIR, -_n.dot(SUN_DIR)).normalize();
-  _x.crossVectors(SUN_DIR, _n).normalize();
-  _basis.makeBasis(_x, SUN_DIR, _n);
-  mesh.quaternion.setFromRotationMatrix(_basis);
+  d.dir.copy(SUN_DIR).applyAxisAngle(_n, d.fan);
+  _x.crossVectors(d.dir, _n).normalize();
+  _basis.makeBasis(_x, d.dir, _n);
+  d.mesh.quaternion.setFromRotationMatrix(_basis);
 }
 
 // Time of day (prd.md > Look and Feel): four periods by the visitor's local hour, plus ?time=.
 const PERIODS = {
-  morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97, disc: 0xffc880, discSize: 1.0, beam: 0xffd9a0, beamO: 0.3 },
-  day: { sun: 0xfff6e6, sunI: 3.0, sky: 0xe6f1ff, ground: 0x7a6a58, hemiI: 1.25, env: 0.7, glow: 0xffffff, glowO: 0.3, night: 0, tint: [1, 1, 1], tv: 0.15, exposure: 0.95, disc: 0xfff6dc, discSize: 0.85, beam: 0xfff2cc, beamO: 0.24 },
-  afternoon: { sun: 0xff7a2a, sunI: 3.0, sky: 0xff9a55, ground: 0x6b3a22, hemiI: 1.0, env: 0.18, glow: 0xff8a3a, glowO: 0.7, night: 0.15, tint: [1.2, 0.75, 0.5], tv: 0.4, exposure: 1.05, disc: 0xff8a2a, discSize: 1.25, beam: 0xff9a40, beamO: 0.42 },
-  night: { sun: 0x8fa8ff, sunI: 0.9, sky: 0x4a66b8, ground: 0x151b30, hemiI: 0.6, env: 0.1, glow: 0x6f8cff, glowO: 0.18, night: 1, tint: [0.4, 0.5, 0.8], tv: 2.5, exposure: 1.1, disc: 0xcfe0ff, discSize: 0.5, beam: 0x8fa8ff, beamO: 0.09 },
+  morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97, disc: 0xffc880, discSize: 1.0, beam: 0xffd9a0, beamO: 0.3, lamp: 0 },
+  day: { sun: 0xfff6e6, sunI: 3.0, sky: 0xe6f1ff, ground: 0x7a6a58, hemiI: 1.25, env: 0.7, glow: 0xffffff, glowO: 0.3, night: 0, tint: [1, 1, 1], tv: 0.15, exposure: 0.95, disc: 0xfff6dc, discSize: 0.85, beam: 0xfff2cc, beamO: 0.24, lamp: 0 },
+  afternoon: { sun: 0xff7a2a, sunI: 3.0, sky: 0xff9a55, ground: 0x6b3a22, hemiI: 1.0, env: 0.18, glow: 0xff8a3a, glowO: 0.7, night: 0.15, tint: [1.2, 0.75, 0.5], tv: 0.4, exposure: 1.05, disc: 0xff8a2a, discSize: 1.25, beam: 0xff9a40, beamO: 0.42, lamp: 0.45 },
+  night: { sun: 0x8fa8ff, sunI: 0.8, sky: 0x3f5bb0, ground: 0x121830, hemiI: 0.42, env: 0.08, glow: 0x6f8cff, glowO: 0.18, night: 1, tint: [0.34, 0.47, 0.9], tv: 2.5, exposure: 1.1, disc: 0xcfe0ff, discSize: 0.5, beam: 0x8fa8ff, beamO: 0.09, lamp: 1 },
 };
 const ALIASES = { pagi: 'morning', siang: 'day', sore: 'afternoon', malam: 'night' };
 const asked = (params.get('time') ?? '').toLowerCase();
@@ -508,14 +768,16 @@ const currentName = () => (mode === 'auto' ? periodFor(new Date().getHours()) : 
 
 const NUM = ['sunI', 'hemiI', 'env', 'glowO', 'night', 'tv', 'exposure', 'discSize', 'beamO'];
 const COL = ['sun', 'sky', 'ground', 'glow', 'tint', 'disc', 'beam'];
-const A = {}; // what is on screen right now
+const A = { lamp: 0 }; // what is on screen right now
 const C = Object.fromEntries(COL.map((c) => [c, new THREE.Color()]));
 const T = { name: '', num: {}, col: Object.fromEntries(COL.map((c) => [c, new THREE.Color()])) };
 
 function setTarget(name) {
   const p = PERIODS[name];
+  if (T.name !== name) lampOverride = null; // a new period hands the lamp back to the clock
   T.name = name;
   for (const n of NUM) T.num[n] = p[n];
+  T.num.lamp = p.lamp;
   T.col.sun.set(p.sun);
   T.col.sky.set(p.sky);
   T.col.ground.set(p.ground);
@@ -526,7 +788,9 @@ function setTarget(name) {
 }
 setTarget(currentName());
 for (const n of NUM) A[n] = T.num[n]; // start already at the target, so the first frame is right
+A.lamp = T.num.lamp;
 for (const c of COL) C[c].copy(T.col[c]);
+const lampState = () => ({ auto: T.num.lamp, on: A.lamp, light: lampLight.intensity, override: lampOverride });
 
 // ── The TV screen: standby status, then the shelf after the VCR is clicked ──
 
@@ -641,23 +905,24 @@ function drawVcrDisplay(t) {
   vcrDisplay.texture.needsUpdate = true;
 }
 
-// ── Mouse: camera turn, hover and click on the VCR (Physics.Raycast) ──
+// ── Mouse: camera turn, hover and click (Physics.Raycast) ─────────────
 
 const pointer = new THREE.Vector2(0, 0);
 const aim = new THREE.Vector2(0, 0); // the eased pointer the camera follows
 let hasPointer = false;
-const raycaster = new THREE.Raycaster();
-const vcrTargets = [];
-vcr.traverse((o) => { if (o.isMesh) vcrTargets.push(o); });
 let pressT = 1;
+let hover = null;
+const HINT_STANDBY = 'VCR · CURTAIN · LAMP · PHOTO';
 
 function toggleTv() {
   tvMode = tvMode === 'standby' ? 'shelf' : 'standby';
   pressT = 0;
-  hint.textContent = tvMode === 'shelf' ? '< BACK TO THE ROOM' : 'CLICK THE VCR';
+  hint.textContent = tvMode === 'shelf' ? '< BACK TO THE ROOM' : HINT_STANDBY;
   hint.classList.toggle('is-button', tvMode === 'shelf');
   document.body.classList.toggle('zoomed', tvMode === 'shelf');
 }
+makeClickable(vcr, 'vcr', toggleTv);
+hint.textContent = HINT_STANDBY;
 
 window.addEventListener('pointermove', (e) => {
   if (e.pointerType === 'touch') return;
@@ -665,8 +930,8 @@ window.addEventListener('pointermove', (e) => {
   pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
 });
 renderer.domElement.addEventListener('click', (e) => {
-  raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-  if (raycaster.intersectObjects(vcrTargets, false).length) toggleTv();
+  const o = clickableAt((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  if (o && (tvMode === 'standby' || o.userData.name === 'vcr')) o.userData.click();
 });
 hint.addEventListener('click', () => { if (tvMode === 'shelf') toggleTv(); });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && tvMode === 'shelf') toggleTv(); });
@@ -701,16 +966,16 @@ if (innerWidth < 700) { // on a phone the panel starts folded so it doesn't cove
 
 // ── Resize and the loop (Update) ──────────────────────────────────────
 
-// Wide enough that the window, the TV, the VCR and the table all fit, whatever the window's
-// shape; on a phone the camera frames the TV and VCR only.
+// Wide enough that the bookshelf, sofa, window, TV cabinet and lamp all fit, whatever the
+// window's shape; on a phone the camera frames the cabinet (TV, VCR, lamp) only.
 function resize() {
   renderer.setSize(innerWidth, innerHeight);
   const aspect = innerWidth / innerHeight;
   camera.aspect = aspect;
   wide = aspect < 0.9 ? POSES.portrait : POSES.desktop;
   const dist = wide.pos.distanceTo(wide.look);
-  const need = aspect < 0.9 ? 2.1 : 3.0;
-  camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(need / 2 / dist / aspect)), 38, 70);
+  const need = aspect < 0.9 ? 2.9 : Math.max(5.0, 2.95 * aspect);
+  camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(need / 2 / dist / aspect)), 36, 70);
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -723,12 +988,15 @@ const camPos = V(0, 0, 0);
 const camLook = V(0, 0, 0);
 const offset = V(0, 0, 0);
 const origin = V(0, 0, 0);
+const hoverTint = new THREE.Color(0.07, 0.055, 0.03);
 let zoom = 0;
+let frameNo = 0;
 
 renderer.setAnimationLoop((now) => {
   timer.update(now);
   const dt = Math.min(timer.getDelta(), 0.1);
   const t = timer.getElapsed();
+  frameNo++;
 
   // Camera: eases between the room and the TV, and turns a little toward the cursor.
   // Still with reduced motion or on touch (no cursor).
@@ -739,24 +1007,35 @@ renderer.setAnimationLoop((now) => {
   const still = reduced.matches || !hasPointer;
   aim.lerp(still ? origin.set(0, 0, 0) : pointer, k(3, dt));
   const amount = 1 - 0.6 * z;
-  offset.copy(camPos).sub(camLook).applyAxisAngle(Y_AXIS, aim.x * 0.16 * amount);
+  offset.copy(camPos).sub(camLook).applyAxisAngle(Y_AXIS, aim.x * 0.13 * amount);
   offset.y += aim.y * 0.12 * amount;
   camera.position.copy(camLook).add(offset);
   camera.lookAt(camLook);
+
+  // The curtain slides toward its target; the panels bunch up at the rod ends when open.
+  curtainAmount += (curtainTarget - curtainAmount) * k(reduced.matches ? 30 : 3, dt);
+  const co = curtainAmount * curtainAmount * (3 - 2 * curtainAmount);
+  curtainOpen = co;
+  const pw = PANEL_CLOSED + (PANEL_OPEN - PANEL_CLOSED) * co;
+  curtainL.scale.x = pw;
+  curtainR.scale.x = pw;
 
   // Light glides toward the current period over a few seconds, like the sky changing.
   if (T.name !== currentName()) setTarget(currentName());
   const s = k(1.5, dt);
   for (const n of NUM) A[n] += (T.num[n] - A[n]) * s;
   for (const c of COL) C[c].lerp(T.col[c], s);
+  const lampGoal = lampOverride === null ? T.num.lamp : (lampOverride ? 1 : 0);
+  A.lamp += (lampGoal - A.lamp) * k(3, dt);
+  // Closed curtains keep the direct sun out (their shadow does that) and the room a bit dimmer.
   sun.color.copy(C.sun);
   sun.intensity = A.sunI;
   hemi.color.copy(C.sky);
   hemi.groundColor.copy(C.ground);
-  hemi.intensity = A.hemiI;
-  scene.environmentIntensity = A.env;
+  hemi.intensity = A.hemiI * (0.6 + 0.4 * co);
+  scene.environmentIntensity = A.env * (0.6 + 0.4 * co);
   glowMat.color.copy(C.glow);
-  glowMat.opacity = A.glowO;
+  glowMat.opacity = A.glowO * (0.35 + 0.65 * co);
   viewMat.uniforms.mixNight.value = A.night;
   viewMat.uniforms.tint.value.copy(C.tint);
   renderer.toneMappingExposure = A.exposure;
@@ -764,25 +1043,41 @@ renderer.setAnimationLoop((now) => {
   tvLight.intensity = A.tv * (1 + flick);
   tvLight.color.set(tvMode === 'standby' ? 0x5a74ff : 0x9fb0d8);
 
-  // The visible sun and its shafts; both fade when the camera is close to the TV so they never cover the screen.
+  // The visible sun and its shafts; both fade when the camera is close to the TV so they never
+  // cover the screen, and when the curtain is closed.
   sunDisc.material.color.copy(C.disc);
+  sunDisc.material.opacity = co;
   sunDisc.scale.setScalar(A.discSize);
-  const shaftBase = A.beamO * (1 - 0.92 * z);
+  const shaftBase = A.beamO * (1 - 0.92 * z) * co * co;
   for (const d of shafts) {
-    aimShaft(d.mesh);
+    aimShaft(d);
     d.mat.color.copy(C.beam);
     d.mat.opacity = shaftBase * d.k * (reduced.matches ? 1 : 0.88 + 0.12 * Math.sin(t * 0.55 + d.ph));
   }
 
+  // Hover: the first solid thing under the pointer, if it is a button.
+  if (hasPointer && frameNo % 2 === 0) hover = clickableAt(pointer.x, pointer.y)?.userData.name ?? null;
+  if (!hasPointer) hover = null;
+  renderer.domElement.style.cursor = hover && (tvMode === 'standby' || hover === 'vcr') ? 'pointer' : 'default';
+
+  pic.material.emissive.set(hover === 'frame' ? 0x1c1c1c : 0x000000);
+
+  // Curtain fabric: light shines through it when it is closed (daylight behind it); hover brightens it.
+  curtainMat.emissive.copy(C.glow).multiplyScalar((1 - co) * Math.min(1.2, A.sunI / 3) * 0.55);
+  if (hover === 'window') curtainMat.emissive.add(hoverTint);
+
+  // Lamp: light, shade glow and halo follow how "on" it is.
+  lampLight.intensity = 1.7 * A.lamp;
+  shadeMat.emissiveIntensity = 0.1 + 1.0 * A.lamp + (hover === 'lamp' ? 0.25 : 0);
+  bulb.material.color.setRGB(1, 0.85, 0.6).multiplyScalar(0.35 + 0.65 * A.lamp);
+  lampGlowSprite.material.opacity = 0.75 * A.lamp;
+
   // VCR: glows green when a tape is due; hover lifts the glow; a click presses it down.
-  raycaster.setFromCamera(pointer, camera);
-  const hovering = hasPointer && raycaster.intersectObjects(vcrTargets, false).length > 0;
-  renderer.domElement.style.cursor = hovering ? 'pointer' : 'default';
   const due = status.ready > 0;
   const pulse = due && !reduced.matches ? 0.75 + 0.25 * Math.sin(t * 2.4) : 1;
   vcrLedMat.color.set(due ? 0x62ff8f : 0x3a3c42).multiplyScalar(pulse);
-  vcrGlow.intensity = (due ? 0.06 : 0) + (hovering ? 0.06 : 0);
-  vcrShell.material.emissive.set(hovering ? 0x0d2216 : 0x000000);
+  vcrGlow.intensity = (due ? 0.06 : 0) + (hover === 'vcr' ? 0.06 : 0);
+  vcrShell.material.emissive.set(hover === 'vcr' ? 0x0d2216 : 0x000000);
   pressT = Math.min(1, pressT + dt * 6);
   vcr.position.y = VCR_Y - Math.sin(pressT * Math.PI) * 0.006;
 
@@ -793,38 +1088,56 @@ renderer.setAnimationLoop((now) => {
 });
 
 // For the automated checks.
-const points = { vcr: vcrShell, screen, frame: pic };
+const named = { vcr: vcrShell, screen, frame, lamp, sofa, bookshelf, plant, window: windowGroup, cabinet: cabBody };
+const _part = new THREE.Box3();
+// Bounding box of the solid meshes only: glows, light shafts and invisible click boxes don't count.
+function solidBox(root) {
+  const b = new THREE.Box3();
+  root.updateWorldMatrix(true, true);
+  root.traverse((o) => {
+    if (!o.isMesh || o.raycast === NOOP || o.material.visible === false) return;
+    if (o.isInstancedMesh) o.computeBoundingBox(); // covers every instance, not just the first
+    else if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    b.union(_part.copy(o.isInstancedMesh ? o.boundingBox : o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+  });
+  return b;
+}
 const _p = V(0, 0, 0);
 function toPixels(v) {
   const p = v.clone().project(camera);
-  return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight };
+  return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight, ndcX: p.x, ndcY: p.y };
 }
-function project(obj, dx = 0) {
-  obj.localToWorld(_p.set(dx, 0, 0)).project(camera);
-  return { x: ((_p.x + 1) / 2) * innerWidth, y: ((1 - _p.y) / 2) * innerHeight, ndcX: _p.x, ndcY: _p.y };
+function project(name) {
+  return toPixels(solidBox(named[name]).getCenter(_p));
+}
+function ndcSpan(name) { // horizontal and vertical extent on screen (NDC) of an object's bounding box
+  const b = solidBox(named[name]);
+  let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const zz of [b.min.z, b.max.z]) {
+    const p = V(x, y, zz).project(camera);
+    x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+  }
+  return { x0, x1, y0, y1 };
 }
 window.__room = {
   camera,
-  vcrTargets,
   status,
   getMode: () => tvMode,
   getPeriod: () => T.name,
-  project: (name) => project(points[name]),
-  screenWidthPx: () => Math.abs(project(screen, 0.32).x - project(screen, -0.32).x),
-  has: (name) => Boolean(scene.getObjectByName(name)),
-  strayObjects: () => {
-    const box = new THREE.Box3();
-    const found = [];
-    scene.traverse((o) => {
-      if (!o.isMesh || !o.visible) return;
-      box.setFromObject(o);
-      if (box.min.x > 1.05 && box.max.y < 1.0) found.push(o.name || o.geometry.type);
-    });
-    return found;
+  project,
+  ndcSpan,
+  screenWidthPx: () => {
+    const a = screen.localToWorld(V(-0.32, 0, 0)).project(camera);
+    const b = screen.localToWorld(V(0.32, 0, 0)).project(camera);
+    return Math.abs(((b.x - a.x) / 2) * innerWidth);
   },
-  worldPos: (name) => scene.getObjectByName(name).getWorldPosition(V(0, 0, 0)).toArray(),
-  sunDir: SUN_DIR.toArray(),
-  lightDir: () => sun.target.position.clone().sub(sun.position).normalize().toArray(),
+  hitAt: (x, y) => clickableAt((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1)?.userData.name ?? null,
+  curtain: () => ({ target: curtainTarget, open: curtainOpen }),
+  curtainPoint: () => toPixels(V(ROD.x0 + 0.09, (CURTAIN_TOP + CURTAIN_BOTTOM) / 2, CURTAIN_Z)),
+  lamp: lampState,
+  photo: () => ({ has: hasPhoto, w: photoSize.w, h: photoSize.h, stored: (() => { try { return (localStorage.getItem(PHOTO_KEY) || '').length; } catch { return -1; } })() }),
+  worldPos: (name) => solidBox(named[name]).getCenter(V(0, 0, 0)).toArray(),
+  worldBox: (name) => { const b = solidBox(named[name]); return { min: b.min.toArray(), max: b.max.toArray() }; },
   sunDiscPx: () => toPixels(sunDisc.position),
   windowRect: () => {
     const a = toPixels(V(fx - WIN.w / 2, fy + WIN.h / 2, WALL_Z));
@@ -833,7 +1146,7 @@ window.__room = {
   },
   shaftLine: (i = 1, from = 0.15, to = 0.6) => {
     const d = shafts[i];
-    const at = (f) => toPixels(d.mesh.position.clone().addScaledVector(SUN_DIR, d.len * f));
+    const at = (f) => toPixels(d.mesh.position.clone().addScaledVector(d.dir, d.len * f));
     return { from: at(from), to: at(to) };
   },
   setShafts: (on) => { for (const d of shafts) d.mesh.visible = on; },

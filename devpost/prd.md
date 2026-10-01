@@ -70,12 +70,13 @@ Source: `scope.md > Inspiration & Identity`.
 **Avoid:** horror mood and heavy static. "It feels scary instead of nostalgic."
 
 **The room around the TV** (learner addition during the build, made in the final review; revised with the learner, designed first as an HTML mockup at `devpost/room-mockup.html` before touching the app):
-- A real 3D room built with three.js: a wall with a window, a low cabinet, the TV, a VCR player on its right, and a photo frame on its left. (The first version's side table and drink can were removed after the learner marked up a screenshot.)
+- A real 3D room built with three.js, in a semi-cartoon style: a tall **bookshelf** on the left with a **sofa** standing in front of it, a wall with a window and **curtains**, the low **cabinet** in the middle holding the TV, a VCR player on its right, a photo frame at its left end and a **table lamp** at its right end, and a potted plant on the far right. (The first version's side table and drink can were removed after the learner marked up a screenshot. The learner then found the left side too empty and asked for the bookshelf, the sofa, the lamp and the curtains.)
 - The camera turns slightly with the cursor, so the room feels three-dimensional. The VHS effects stay inside the TV screen.
-- The objects are simple 3D shapes made in code; AI-generated art is used only for the view outside the window (a day and a night picture), so light can really fall on the objects and the VCR can be clicked. AI art must carry no logos, trademarks, or watermarks, and it's credited in the README.
+- The objects are simple, rounded 3D shapes made in code; AI-generated art is used only for the view outside the window (a day and a night picture), so light can really fall on the objects and the VCR can be clicked. The view outside is drawn in the same semi-cartoon style as the room (the learner found a realistic street outside a cartoon room wrong) and is seen side-on across a road, not down a road toward the house. AI art must carry no logos, trademarks, or watermarks, and it's credited in the README.
 - Light follows the visitor's real local time: morning 05–10 warm and soft, day 10–15 bright, afternoon 15–18 orange, night 18–05 moonlit blue with the TV as the main light. Changes between periods are gradual. For the demo video, `?time=morning|day|afternoon|night` picks a period (learner agreed).
 - The sun is visible in the window's upper-left corner, and soft shafts of light run from the window down toward the TV along the same direction the real light travels (learner's drawing on a screenshot: orange = light source, yellow = light direction). The shafts fade out when the camera moves in on the TV so they never cover the screen.
-- The photo frame stands on the cabinet just left of the TV. The photo in the frame is a fixed image chosen by the learner. Uploading your own photo is Later.
+- **Things to click:** the VCR opens the shelf on the TV; the **curtain** (click the window or the curtain) closes and opens with a soft slide, and a closed curtain dims the room and hides the sun and its shafts; the **lamp** switches on and off (it comes on by itself in the evening and at night); the **photo frame** opens the file picker.
+- **The photo frame is the player's own small decoration:** it starts as an empty slot ("YOUR PHOTO"); the player picks a picture, it is cropped to fill the frame, shrunk, and kept only in this browser (localStorage, never uploaded); REMOVE PHOTO brings the empty slot back. This moved here from Later at the learner's request.
 - On touch screens (no cursor) and with the browser's reduced-motion setting, the camera stays still (derived from the learner's reduced-motion rule).
 - Why: "I want to bring the atmosphere to life, so it feels more interactive and nicer to look at."
 
@@ -223,7 +224,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - **Closing the app mid-timer records nothing; the tape stays READY and replays from the start** — learner's addition.
 - **A locked tape played early and interrupted returns to locked** — "its return date still hasn't arrived."
 - **Two typefaces, color = status, effects carry meaning** — see `Look and Feel`.
-- **A real 3D room around the TV (three.js), the camera turning with the cursor, light following the real time of day, built in the final review; AI art only for the window view; a fixed photo in the frame** — see `Look and Feel`.
+- **A real 3D room around the TV (three.js, semi-cartoon), the camera turning with the cursor, light following the real time of day, built in the final review; AI art only for the window view (cartoon, side-on); a bookshelf and sofa, a lamp and a curtain the player can click; a photo frame where the player can put their own picture** — see `Look and Feel`.
 
 **Assumptions (not learner decisions yet):**
 - None remaining.
@@ -238,7 +239,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - Replay of completed tapes without timer.
 - Tapes persist between visits.
 - The Look and Feel above: CRT frame, scanlines varying by screen, two typefaces, status colors.
-- The room around the TV (built in the final review): a 3D room with the camera turning with the cursor, light by time of day, a clickable VCR that opens the shelf, an unbranded can, and a photo frame with a fixed photo.
+- The room around the TV (built in the final review): a 3D room with the camera turning with the cursor, light by time of day, a clickable VCR that opens the shelf, a curtain and a lamp the player can click, and a photo frame that takes the player's own picture.
 
 ## Deferred From the POC
 - **Archiving and deleting tapes** — the learner moved these to Later; the demo doesn't need them.
@@ -253,7 +254,7 @@ From `scope.md > Later` and this interview:
 - A welcome message/intro when a tape starts playing.
 - VHS mechanism sound effects.
 - Archive and delete tapes.
-- Uploading your own photo into the frame beside the TV, and adjusting how it sits in the frame (learner decision during the build).
+- Adjusting how the player's photo sits in the frame (zoom and move it). The upload itself is now part of the room, not Later.
 
 ## Non-Goals
 - **Horror mood or heavy static** — Pause Tape should feel nostalgic, not scary.
