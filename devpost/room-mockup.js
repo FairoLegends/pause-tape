@@ -43,7 +43,7 @@ const fy = WIN.y;
 // Camera poses: the whole room, the room on a phone, and close to the TV once the shelf is open.
 const POSES = {
   desktop: { pos: V(-0.1, 1.45, 2.4), look: V(-0.1, 1.17, -1.4) },
-  portrait: { pos: V(0.0, 1.25, 2.9), look: V(0.0, 0.95, -1.4) },
+  portrait: { pos: V(0.0, 1.25, 2.9), look: V(0.0, 1.3, -1.4) },
   tv: { pos: V(-0.3, 0.95, 0.0), look: V(-0.3, 0.93, -1.12) },
 };
 let wide = POSES.desktop;
@@ -140,14 +140,13 @@ floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), std(0xd8d4cc, 1));
-ceiling.rotation.x = Math.PI / 2;
-ceiling.position.y = 2.7;
-scene.add(ceiling);
-
 // Back wall with a window opening (four boxes around the hole).
 const wallW = 5.2;
-const wallH = 2.7;
+const wallH = 3.6; // tall enough that a portrait phone screen, which sees far above the window, still finds wall
+const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), std(0xd8d4cc, 1, 0, { emissive: 0xd8d4cc, emissiveIntensity: 0.45 }));
+ceiling.rotation.x = Math.PI / 2;
+ceiling.position.y = wallH;
+scene.add(ceiling);
 const wt = 0.12;
 const leftW = (WIN.x - WIN.w / 2) + wallW / 2;
 box(leftW, wallH, wt, wallMat, -wallW / 2 + leftW / 2, wallH / 2, WALL_Z);
@@ -1065,6 +1064,8 @@ renderer.setAnimationLoop((now) => {
   // Curtain fabric: light shines through it when it is closed (daylight behind it); hover brightens it.
   curtainMat.emissive.copy(C.glow).multiplyScalar((1 - co) * Math.min(1.2, A.sunI / 3) * 0.55);
   if (hover === 'window') curtainMat.emissive.add(hoverTint);
+
+  ceiling.material.emissiveIntensity = 0.45 * (1 - 0.85 * A.night); // cream by day, dark at night
 
   // Lamp: light, shade glow and halo follow how "on" it is.
   lampLight.intensity = 1.7 * A.lamp;
