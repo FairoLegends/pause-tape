@@ -429,7 +429,7 @@ scene.add(sun, sun.target);
 
 // Time of day (prd.md > Look and Feel): four periods by the visitor's local hour, plus ?time=.
 const PERIODS = {
-  morning: { sun: 0xffd2a0, sunI: 2.4, sky: 0xffe2c0, ground: 0x6b5644, hemiI: 1.1, env: 0.55, glow: 0xffd9b0, glowO: 0.4, night: 0, tint: [1.05, 0.97, 0.88], tv: 0.3, exposure: 1.0 },
+  morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97 },
   day: { sun: 0xfff6e6, sunI: 3.0, sky: 0xe6f1ff, ground: 0x7a6a58, hemiI: 1.25, env: 0.7, glow: 0xffffff, glowO: 0.3, night: 0, tint: [1, 1, 1], tv: 0.15, exposure: 0.95 },
   afternoon: { sun: 0xff7a2a, sunI: 3.0, sky: 0xff9a55, ground: 0x6b3a22, hemiI: 1.0, env: 0.18, glow: 0xff8a3a, glowO: 0.7, night: 0.15, tint: [1.2, 0.75, 0.5], tv: 0.4, exposure: 1.05 },
   night: { sun: 0x8fa8ff, sunI: 0.9, sky: 0x4a66b8, ground: 0x151b30, hemiI: 0.6, env: 0.1, glow: 0x6f8cff, glowO: 0.18, night: 1, tint: [0.4, 0.5, 0.8], tv: 2.5, exposure: 1.1 },
