@@ -3,6 +3,7 @@
 // Nothing is saved until "I'm back on it", so closing the page mid-timer records nothing.
 
 import { formatVcrDate } from './tapes.js';
+import { tuneIn, settleIn, loadBar, nudge, killMotion } from './motion.js';
 
 // Pacing (spec.md > Implementation details), kept in one place like tuning values on a
 // ScriptableObject.
@@ -75,6 +76,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     skip.hidden = false;
     counter.textContent = counterText(0);
     show('blue');
+    loadBar(screens.blue.querySelector('[data-blue-bar]'), PACE.blueMs / 1000);
     later(s, PACE.blueMs, () => {
       show('playback');
       s.ticker = setInterval(() => tick(s), 250);
@@ -115,6 +117,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
   function revealAll(s) {
     for (const id of s.pending) clearTimeout(id);
     s.pending = [];
+    killMotion(firstText);
     list.replaceChildren();
     for (const [key, label] of ANSWERS) {
       list.append(s.tape[key] ? answer(label, s.tape[key]) : noSignal(label, false));
@@ -127,7 +130,11 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     skip.hidden = true;
     firstText.textContent = s.tape.firstStep;
     firstBox.hidden = false;
-    if (glitch) flash(firstBox);
+    if (glitch) {
+      flash(firstBox);
+      settleIn(firstBox);
+      tuneIn(firstText);
+    }
     requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
     if (s.mode === 'return') {
       s.timerStart = Date.now();
@@ -144,6 +151,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     if (s.timerStart !== null) {
       const { text, over } = timerText(now - s.timerStart);
       timer.textContent = text;
+      if (over && !timer.classList.contains('timer--over')) nudge(timer);
       timer.classList.toggle('timer--over', over);
     }
   }
@@ -161,12 +169,18 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     if (!session) return;
     for (const id of session.pending) clearTimeout(id);
     clearInterval(session.ticker);
+    killMotion(list.querySelectorAll('.answer, .answer__text'));
+    killMotion([firstBox, firstText]);
     session = null;
   }
 
   function reveal(node, glitch) {
     list.append(node);
-    if (glitch) flash(node);
+    if (glitch) {
+      flash(node);
+      settleIn(node);
+      tuneIn(node.querySelector('.answer__text'));
+    }
     list.scrollTop = list.scrollHeight;
   }
 
@@ -190,6 +204,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     const body = document.createElement('p');
     body.className = 'answer__text';
     body.textContent = text;
+    body.setAttribute('aria-label', text);
     node.append(head, body);
     return node;
   }

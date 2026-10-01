@@ -29,7 +29,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
   Learner check: Play the tape due today. Watch your answers appear one by one, let the first step appear, and press "I'm back on it" after a minute or two. Check the "BACK ON IT · N MIN" screen and the tape at the back of the shelf. Press ▶ on the NO SIGNAL tape and choose CANCEL, then replay the completed tape and confirm the timer doesn't appear. Tell me what you noticed and what you'd change about how playback looks and feels.
   Commit: `Play tapes back with the first-step timer`
 
-- [ ] **3. The screen looks and feels like an old VHS tape**
+- [x] **3. The screen looks and feels like an old VHS tape**
   Becomes usable: A click-through overlay adds scanlines, a soft vignette, and a slow, gentle flicker, with strength set by `--vhs` for each screen: 0.3 on Record, 0.5 on the Shelf and result screens, 1.0 on the blue screen and Playback. Each revealed answer gets a short glitch: a small shift plus a red/blue split. With the browser's reduced-motion setting on, the flicker and glitch stop and the scanlines stay.
   Why now: The effect layer sits on top of screens that now exist, so it can be tuned against real content without touching behavior. It comes after the checkpoint so any feedback on playback's look folds into it. It also answers the learner's recorded unknown about how the VHS effect is made on the web.
   PRD ref: `prd.md > Look and Feel`, `prd.md > Playback` ("Scanlines/effects are visibly stronger here than on the Record Screen")
@@ -67,6 +67,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
 
 ## Final Review
 
+- [ ] Playback screen rendered through a shader (learner choice 3): the blue screen and Playback drawn into a canvas so the shader can curve the picture and split its colors like shader.se, keeping the HTML version as the fallback and for clicks.
 - [ ] Room around the TV (learner request, built here): a layered room (wall with a window, desk, unbranded drink can, photo frame with a fixed photo) that moves opposite to the cursor, window light as its own layer, VHS effects kept inside the screen, still on touch screens and with reduced motion. The learner supplies the room art before this review; AI art must have no logos or watermarks and is credited in the README.
 - [ ] Final review complete — feedback resolved and learner confirms ready to ship
 
@@ -85,4 +86,5 @@ Activity mode: not started
 ## Revisions
 
 - The ● REC, ■ STOP, and ▶ symbols are drawn as small CSS shapes instead of typed characters — VT323 has no glyphs for ●, ■, or ▶ (checked in the font's character map), so typed symbols would fall back to a different font on each computer.
+- Slice 3 uses a three.js shader layer (`js/crt.js`) with the planned CSS layer as its fallback, plus GSAP text motion (`js/motion.js`); a full shader-rendered Playback screen is added to the final review — the first hands-on checkpoint found the look "still too plain" against the learner's reference (shader.se), and the learner chose this path over CSS only.
 - The Playback screen has a ■ STOP button that returns to the shelf without recording anything, the same as closing the page — a replayed tape shows no timer and no "I'm back on it" button, so without it there was no way back to the shelf.

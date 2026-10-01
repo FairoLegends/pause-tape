@@ -85,7 +85,7 @@ body {
     inset 0 0 14px rgba(98, 140, 255, 0.10);
 }
 
-/* The VHS overlay element; its effects are styled in css/vhs.css (slice 3). */
+/* The VHS overlay element; its effects are styled in css/vhs.css. */
 .vhs {
   position: absolute;
   inset: 0;
@@ -548,7 +548,19 @@ body {
 /* ── Blue VCR Screen ──────────────────────────────────────────── */
 
 .screen--blue {
+  align-items: center;
+  justify-content: center;
   background: var(--vcr-blue);
+}
+
+/* Read by screen readers, invisible on screen (the visible copy may be mid-animation). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .blue__play {

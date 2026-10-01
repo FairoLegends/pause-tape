@@ -7,8 +7,10 @@ import { todayLocal, formatVcrDate } from './tapes.js';
 import { renderShelf } from './shelf.js';
 import { initRecord } from './record.js';
 import { initPlayback, PACE } from './playback.js';
+import { startCrt } from './crt.js';
+import { switchIn } from './motion.js';
 
-// --vhs per screen; css/vhs.css reads it once the effect layer lands (slice 3).
+// --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
 const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, blue: 1, playback: 1, backonit: 0.5 };
 
 const screens = Object.fromEntries(
@@ -61,6 +63,7 @@ function show(name) {
   current = name;
   if (name === 'shelf') drawShelf();
   hooks[name]?.enter();
+  if (name !== 'blue') switchIn(screens[name]);
 }
 
 // Tape states are worked out from today's date on every draw, so a locked tape
@@ -96,5 +99,12 @@ document.querySelector('[data-action="early-play"]').addEventListener('click', (
 document.querySelector('[data-action="early-cancel"]').addEventListener('click', () => show('shelf'));
 // BACK ON IT returns by itself after a few seconds, or right away when tapped.
 screens.backonit.addEventListener('click', () => show('shelf'));
+
+// The shader layer starts once; if WebGL isn't available the CSS layer keeps working.
+const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+startCrt(document.querySelector('.tv__screen'), {
+  getVhs: () => VHS[current] ?? 0.5,
+  reducedMotion: () => reducedQuery.matches,
+});
 
 show('shelf');

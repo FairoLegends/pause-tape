@@ -43,7 +43,10 @@ Nothing is saved between step 7 and step 9. That's what makes "closing the app m
   - JavaScript: https://developer.mozilla.org/en-US/docs/Web/JavaScript
 - **JavaScript modules (`<script type="module">`)** so each script file has one job, like separate MonoBehaviours. This is an implementation detail. Modules need the page served over `http://` rather than double-clicked, so a local server is used; see below. Docs: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
 - **localStorage** for tapes. Learner choice, because it's like PlayerPrefs, and accounts and sync are deferred. Docs: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage
-- **VHS effects in CSS**, intensity driven by the `--vhs` custom property. Learner choice, over WebGL shaders (WebGL can't post-process normal HTML text and buttons). Accepted tradeoff: no curved/warped distortion.
+- **VHS effects: a three.js shader layer with a CSS fallback**, both driven by the `--vhs` custom property (learner revision during `5-build`; see `Decisions and Open Issues`). The shader sits on top of the HTML and can't bend the text itself, the same way a URP fullscreen pass doesn't touch a Screen Space – Overlay canvas; bending the Playback screen is the planned polish step.
+  - three.js r186 (MIT), stored in `assets/vendor/`: https://threejs.org/docs/
+  - GSAP 3.15 with ScrambleText (standard no-charge license, which allows use on websites; notices stay in the files), stored in `assets/vendor/`: https://gsap.com/docs/v3/
+  - Still no npm and no build step: the library files are served like any other file.
   - Custom properties: https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties
   - Animations: https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_animations
   - `prefers-reduced-motion`: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion
@@ -204,11 +207,15 @@ BuildWithAI-Basics/
 │   ├── shelf.js          # Draws the shelf and the empty state
 │   ├── record.js         # Record form, ● REC clock, validation, save
 │   ├── ics.js            # Builds and downloads the .ics file
-│   └── playback.js       # Blue screen, one-by-one reveal, ▶ PLAY counter, ▶▶, timer, back on it, replay
+│   ├── playback.js       # Blue screen, one-by-one reveal, ▶ PLAY counter, ▶▶, timer, back on it, replay
+│   ├── crt.js            # three.js shader layer over the screen (grain, tracking band, scanlines), follows --vhs
+│   └── motion.js         # GSAP: text tuning in, blue-screen loading bar, screen switch
 ├── assets/
 │   └── fonts/
 │       ├── VT323-Regular.ttf    # The VCR OSD font (SIL OFL)
 │       └── OFL.txt              # The font's license, kept with the file
+│   └── vendor/                  # three.js (MIT, with its LICENSE) and GSAP (notices kept in the files)
+├── LICENSE               # MIT, the project's own open source license (required by the rules)
 ├── README.md             # What it is, how to run locally, live link, known limitations (calendar findings)
 ├── .gitignore            # Already exists: keeps devpost/learner-profile.md and .env files out
 ├── devpost/              # Devpost learning workspace (planning docs)
@@ -276,7 +283,8 @@ Stored in `assets/fonts/` with its license. Loaded with `@font-face` in `base.cs
 - **Everything in the browser:** tapes in localStorage (like PlayerPrefs), `.ics` created in the browser, VCR font stored in the project.
 - **HTML/CSS/JS with no framework.**
 - **VHS effect as a CSS layer driven by `--vhs`**, mirroring `VHSDriver`. Curved distortion isn't needed ("nostalgic, not scary").
-- **CSS confirmed over WebGL at the start of `5-build`.** The learner asked whether the app could switch to WebGL for 3D, since 27 days remain. Three options were weighed: keep CSS, a hybrid WebGL shader on the Playback screen only, or a full 3D scene. The learner chose to keep CSS, so the stack and effect approach above are unchanged.
+- **Revised during `5-build`, after the first hands-on checkpoint: a three.js shader layer now, a full shader-rendered Playback screen in the final review.** The learner tried slices 1–2 and found the look "still too plain", pointing to shader.se as the reference. Of three options (a shader overlay only; Playback fully rendered through a shader; the overlay now and the full version during polish), the learner chose the third: "I want the playback screen to feel like shader.se, but the app has to stay whole and submittable at any time." The overlay is a click-through three.js canvas (grain, rolling tracking band, chroma fringe, scanlines, vignette, glass glare) whose strength follows `--vhs`; the CSS layer stays as the fallback when WebGL isn't available. GSAP's ScrambleText makes each answer "tune in". React, ScrollTrigger, and Lottie are not used in Pause Tape (learner decision); those skills are kept for the future NO SIGNAL website.
+- **CSS confirmed over WebGL at the start of `5-build`** (superseded by the revision above). The learner asked whether the app could switch to WebGL for 3D, since 27 days remain. Three options were weighed: keep CSS, a hybrid WebGL shader on the Playback screen only, or a full 3D scene. The learner chose to keep CSS, so the stack and effect approach above are unchanged.
 - **Flicker slow and soft, never fast blinking; with reduced motion, flicker and glitch off, scanlines stay.** Learner addition.
 - **Demo shows the `.ics` opening in Outlook on the laptop**, so it's all in one screen recording. Test the Android phone too, and document any alarm or file-opening problem in the README as a limitation.
 - **A room around the TV, added during `5-build` for the final review** (see `prd.md > Look and Feel`): layered room images that move opposite to the cursor, done with CSS transforms and pointer events rather than WebGL; window light as its own layer; VHS effects stay inside the screen; still on touch screens and with reduced motion. AI-generated art is allowed without logos or watermarks and is credited in the README. A fixed photo for now; uploading your own photo is Later.
