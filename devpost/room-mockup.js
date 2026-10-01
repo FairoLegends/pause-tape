@@ -32,8 +32,8 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 40);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // Camera poses: the whole room, the room on a phone, and close to the TV once the shelf is open.
 const POSES = {
-  desktop: { pos: V(0, 1.32, 1.3), look: V(0, 1.02, -1.4) },
-  portrait: { pos: V(0.3, 1.25, 1.5), look: V(0.3, 1.0, -1.4) },
+  desktop: { pos: V(-0.3, 1.32, 1.3), look: V(-0.3, 1.02, -1.4) },
+  portrait: { pos: V(0.1, 1.25, 1.5), look: V(0.1, 1.0, -1.4) },
   tv: { pos: V(0.02, 0.95, -0.05), look: V(0, 0.88, -1.16) },
 };
 let wide = POSES.desktop;
@@ -296,6 +296,7 @@ const woodTex = canvasTexture(256, 256, (g, w, h) => {
 const woodMat = std(0xffffff, 0.6, 0, { map: woodTex.texture });
 
 const cab = new THREE.Group();
+cab.name = 'cabinet';
 cab.position.set(0.15, 0, -1.42);
 scene.add(cab);
 box(1.75, 0.5, 0.55, woodMat, 0, 0.25, 0, cab, 0.012);
@@ -307,6 +308,7 @@ for (const dx of [-0.43, 0.43]) { // cabinet doors
 
 // CRT TV: a deep body, a bezel, and the screen (the app lives here later).
 const tv = new THREE.Group();
+tv.name = 'tv';
 tv.position.set(-0.15, 0.53, -0.02);
 cab.add(tv);
 const tvBody = std(0x24262c, 0.45, 0.1);
@@ -343,6 +345,7 @@ scene.add(tvLight);
 // VCR on the cabinet, beside the TV: the clickable object.
 const VCR_Y = 0.53;
 const vcr = new THREE.Group();
+vcr.name = 'vcr';
 vcr.position.set(0.55, VCR_Y, 0.02);
 cab.add(vcr);
 const vcrShell = box(0.5, 0.1, 0.36, std(0x2b2d33, 0.4, 0.25), 0, 0.05, 0, vcr, 0.012);
@@ -363,32 +366,7 @@ const vcrGlow = new THREE.PointLight(0x62ff8f, 0, 0.9, 2);
 vcrGlow.position.set(0.7, 0.58, -1.0);
 scene.add(vcrGlow);
 
-// Side table with the can and the photo frame.
-const side3 = new THREE.Group();
-side3.position.set(1.3, 0, -1.3);
-scene.add(side3);
-box(0.42, 0.03, 0.36, woodMat, 0, 0.62, 0, side3, 0.008);
-for (const [lx, lz] of [[-0.17, -0.14], [0.17, -0.14], [-0.17, 0.14], [0.17, 0.14]]) box(0.03, 0.62, 0.03, woodMat, lx, 0.31, lz, side3);
-
-// Drink can: a plain painted cylinder, no logo, no text.
-const can = new THREE.Group();
-can.position.set(-0.08, 0.635, 0.03);
-side3.add(can);
-const canBody = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.12, 32), std(0xb3263a, 0.35, 0.7));
-canBody.position.y = 0.06;
-canBody.castShadow = true;
-can.add(canBody);
-const canTop = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.033, 0.01, 32), std(0xc9ccd1, 0.25, 1));
-canTop.position.y = 0.125;
-can.add(canTop);
-const canBottom = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.029, 0.008, 32), std(0xc9ccd1, 0.25, 1));
-canBottom.position.y = 0.004;
-can.add(canBottom);
-const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0332, 0.0332, 0.02, 32, 1, true), std(0xe9e4d8, 0.4, 0.3));
-band.position.y = 0.075;
-can.add(band);
-
-// Photo frame: a fixed photo (placeholder until the learner's photo arrives).
+// Photo frame on the cabinet, just left of the TV (a fixed photo; placeholder until the learner's photo arrives).
 const photo = canvasTexture(256, 320, (g, w, h) => {
   const grd = g.createLinearGradient(0, 0, 0, h);
   grd.addColorStop(0, '#2a3a5c');
@@ -402,9 +380,11 @@ const photo = canvasTexture(256, 320, (g, w, h) => {
   g.fillText('PHOTO', w / 2, h / 2 + 26);
 });
 const frame = new THREE.Group();
-frame.position.set(0.08, 0.635, -0.03);
-frame.rotation.y = -0.45;
-side3.add(frame);
+frame.name = 'frame';
+frame.position.set(-0.71, 0.53, 0.05);
+frame.rotation.y = 0.3; // turned a little toward the camera
+frame.scale.setScalar(1.12);
+cab.add(frame);
 box(0.16, 0.2, 0.015, std(0x2b2018, 0.5), 0, 0.1, 0, frame);
 const pic = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.17), std(0xffffff, 0.6, 0, { map: photo.texture }));
 pic.position.set(0, 0.1, 0.0085);
@@ -414,11 +394,16 @@ loader.load('../assets/room/photo.jpg', (t) => { t.colorSpace = THREE.SRGBColorS
 
 // ── Lights ────────────────────────────────────────────────────────────
 
+// One direction for everything that is "the sun": the light itself, the visible shafts and the
+// disc seen in the window. It travels from the window's upper left toward the lower right.
+const SUN_DIR = V(0.66, -0.4, 0.64).normalize();
+const SUN_AIM = V(-0.1, 0.55, -0.9);
+
 const hemi = new THREE.HemisphereLight(0xffffff, 0x3a2a1f, 1);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 3);
-sun.position.set(fx - 1.8, 4.6, WALL_Z - 4); // starts behind the wall and passes through the window
-sun.target.position.set(fx + 1.2, 0, 0.2);
+sun.position.copy(SUN_AIM).addScaledVector(SUN_DIR, -9); // behind the wall; the light enters through the window
+sun.target.position.copy(SUN_AIM);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.5, far: 20 });
@@ -427,12 +412,87 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
 
+// The sun you can see in the window (upper left), and soft shafts of light leaving the window
+// along SUN_DIR. The disc is placed so it appears at the window's upper left from the home camera;
+// it sits behind the wall, so it shifts a little when the camera turns, like the view does.
+const sunTex = canvasTexture(256, 256, (g, w, h) => {
+  const grd = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.09, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.2, 'rgba(255,255,255,0.5)');
+  grd.addColorStop(0.45, 'rgba(255,255,255,0.14)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+});
+const sunDisc = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: sunTex.texture, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+}));
+{
+  const home = POSES.desktop.pos;
+  const inWindow = V(fx - 0.36, fy + 0.33, WALL_Z); // where the sun should appear inside the opening
+  const k = (WALL_Z - 1.0 - home.z) / (inWindow.z - home.z);
+  sunDisc.position.copy(home).addScaledVector(inWindow.clone().sub(home), k);
+}
+scene.add(sunDisc);
+
+// One soft ribbon per shaft: bright in the middle, fading at the sides, at the window end and at
+// the far end. (The canvas is drawn bottom-up because texture rows run upward.)
+const shaftTex = canvasTexture(64, 256, (g, w, h) => {
+  const img = g.createImageData(w, h);
+  const ease = (lo, hi, x) => { const t = Math.min(1, Math.max(0, (x - lo) / (hi - lo))); return t * t * (3 - 2 * t); };
+  for (let y = 0; y < h; y++) {
+    const along = 1 - y / (h - 1); // 0 at the window end, 1 at the far end
+    const lengthwise = ease(0, 0.12, along) * (1 - ease(0.4, 1, along));
+    for (let x = 0; x < w; x++) {
+      const across = Math.abs((2 * x) / (w - 1) - 1);
+      const a = lengthwise * Math.pow(1 - ease(0, 1, across), 1.7);
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(255 * a);
+    }
+  }
+  g.putImageData(img, 0, 0);
+});
+const SHAFTS = [ // start inside the window (metres from its centre), width, length, strength, breathing phase
+  { u: -0.38, v: 0.3, w: 0.2, len: 2.0, k: 1.0, ph: 0 },
+  { u: -0.16, v: 0.14, w: 0.15, len: 1.8, k: 0.85, ph: 1.7 },
+  { u: 0.08, v: -0.02, w: 0.24, len: 1.9, k: 0.9, ph: 3.1 },
+  { u: -0.4, v: -0.14, w: 0.12, len: 1.5, k: 0.6, ph: 4.4 },
+  { u: 0.28, v: -0.24, w: 0.16, len: 1.5, k: 0.6, ph: 5.6 },
+];
+const shafts = SHAFTS.map((d) => {
+  const geo = new THREE.PlaneGeometry(1, 1);
+  geo.translate(0, 0.5, 0); // the ribbon grows from its start point along +Y
+  const mat = new THREE.MeshBasicMaterial({
+    map: shaftTex.texture, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    toneMapped: false, side: THREE.DoubleSide, opacity: 0,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(fx + d.u, fy + d.v, WALL_Z + 0.06);
+  mesh.scale.set(d.w, d.len, 1);
+  mesh.renderOrder = 2;
+  scene.add(mesh);
+  return { ...d, mesh, mat };
+});
+const _n = V(0, 0, 0);
+const _x = V(0, 0, 0);
+const _basis = new THREE.Matrix4();
+function aimShaft(mesh) {
+  // Turn the ribbon around its own axis (the light direction) so its flat side faces the camera.
+  _n.copy(camera.position).sub(mesh.position);
+  _n.addScaledVector(SUN_DIR, -_n.dot(SUN_DIR)).normalize();
+  _x.crossVectors(SUN_DIR, _n).normalize();
+  _basis.makeBasis(_x, SUN_DIR, _n);
+  mesh.quaternion.setFromRotationMatrix(_basis);
+}
+
 // Time of day (prd.md > Look and Feel): four periods by the visitor's local hour, plus ?time=.
 const PERIODS = {
-  morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97 },
-  day: { sun: 0xfff6e6, sunI: 3.0, sky: 0xe6f1ff, ground: 0x7a6a58, hemiI: 1.25, env: 0.7, glow: 0xffffff, glowO: 0.3, night: 0, tint: [1, 1, 1], tv: 0.15, exposure: 0.95 },
-  afternoon: { sun: 0xff7a2a, sunI: 3.0, sky: 0xff9a55, ground: 0x6b3a22, hemiI: 1.0, env: 0.18, glow: 0xff8a3a, glowO: 0.7, night: 0.15, tint: [1.2, 0.75, 0.5], tv: 0.4, exposure: 1.05 },
-  night: { sun: 0x8fa8ff, sunI: 0.9, sky: 0x4a66b8, ground: 0x151b30, hemiI: 0.6, env: 0.1, glow: 0x6f8cff, glowO: 0.18, night: 1, tint: [0.4, 0.5, 0.8], tv: 2.5, exposure: 1.1 },
+  morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97, disc: 0xffc880, discSize: 1.0, beam: 0xffd9a0, beamO: 0.3 },
+  day: { sun: 0xfff6e6, sunI: 3.0, sky: 0xe6f1ff, ground: 0x7a6a58, hemiI: 1.25, env: 0.7, glow: 0xffffff, glowO: 0.3, night: 0, tint: [1, 1, 1], tv: 0.15, exposure: 0.95, disc: 0xfff6dc, discSize: 0.85, beam: 0xfff2cc, beamO: 0.24 },
+  afternoon: { sun: 0xff7a2a, sunI: 3.0, sky: 0xff9a55, ground: 0x6b3a22, hemiI: 1.0, env: 0.18, glow: 0xff8a3a, glowO: 0.7, night: 0.15, tint: [1.2, 0.75, 0.5], tv: 0.4, exposure: 1.05, disc: 0xff8a2a, discSize: 1.25, beam: 0xff9a40, beamO: 0.42 },
+  night: { sun: 0x8fa8ff, sunI: 0.9, sky: 0x4a66b8, ground: 0x151b30, hemiI: 0.6, env: 0.1, glow: 0x6f8cff, glowO: 0.18, night: 1, tint: [0.4, 0.5, 0.8], tv: 2.5, exposure: 1.1, disc: 0xcfe0ff, discSize: 0.5, beam: 0x8fa8ff, beamO: 0.09 },
 };
 const ALIASES = { pagi: 'morning', siang: 'day', sore: 'afternoon', malam: 'night' };
 const asked = (params.get('time') ?? '').toLowerCase();
@@ -446,8 +506,8 @@ function periodFor(hour) {
 }
 const currentName = () => (mode === 'auto' ? periodFor(new Date().getHours()) : mode);
 
-const NUM = ['sunI', 'hemiI', 'env', 'glowO', 'night', 'tv', 'exposure'];
-const COL = ['sun', 'sky', 'ground', 'glow', 'tint'];
+const NUM = ['sunI', 'hemiI', 'env', 'glowO', 'night', 'tv', 'exposure', 'discSize', 'beamO'];
+const COL = ['sun', 'sky', 'ground', 'glow', 'tint', 'disc', 'beam'];
 const A = {}; // what is on screen right now
 const C = Object.fromEntries(COL.map((c) => [c, new THREE.Color()]));
 const T = { name: '', num: {}, col: Object.fromEntries(COL.map((c) => [c, new THREE.Color()])) };
@@ -460,6 +520,8 @@ function setTarget(name) {
   T.col.sky.set(p.sky);
   T.col.ground.set(p.ground);
   T.col.glow.set(p.glow);
+  T.col.disc.set(p.disc);
+  T.col.beam.set(p.beam);
   T.col.tint.setRGB(...p.tint);
 }
 setTarget(currentName());
@@ -647,7 +709,7 @@ function resize() {
   camera.aspect = aspect;
   wide = aspect < 0.9 ? POSES.portrait : POSES.desktop;
   const dist = wide.pos.distanceTo(wide.look);
-  const need = aspect < 0.9 ? 1.75 : 3.3;
+  const need = aspect < 0.9 ? 2.1 : 3.0;
   camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(need / 2 / dist / aspect)), 38, 70);
   camera.updateProjectionMatrix();
 }
@@ -702,6 +764,16 @@ renderer.setAnimationLoop((now) => {
   tvLight.intensity = A.tv * (1 + flick);
   tvLight.color.set(tvMode === 'standby' ? 0x5a74ff : 0x9fb0d8);
 
+  // The visible sun and its shafts; both fade when the camera is close to the TV so they never cover the screen.
+  sunDisc.material.color.copy(C.disc);
+  sunDisc.scale.setScalar(A.discSize);
+  const shaftBase = A.beamO * (1 - 0.92 * z);
+  for (const d of shafts) {
+    aimShaft(d.mesh);
+    d.mat.color.copy(C.beam);
+    d.mat.opacity = shaftBase * d.k * (reduced.matches ? 1 : 0.88 + 0.12 * Math.sin(t * 0.55 + d.ph));
+  }
+
   // VCR: glows green when a tape is due; hover lifts the glow; a click presses it down.
   raycaster.setFromCamera(pointer, camera);
   const hovering = hasPointer && raycaster.intersectObjects(vcrTargets, false).length > 0;
@@ -721,8 +793,12 @@ renderer.setAnimationLoop((now) => {
 });
 
 // For the automated checks.
-const points = { vcr: vcrShell, screen, can: canBody, frame: pic };
+const points = { vcr: vcrShell, screen, frame: pic };
 const _p = V(0, 0, 0);
+function toPixels(v) {
+  const p = v.clone().project(camera);
+  return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight };
+}
 function project(obj, dx = 0) {
   obj.localToWorld(_p.set(dx, 0, 0)).project(camera);
   return { x: ((_p.x + 1) / 2) * innerWidth, y: ((1 - _p.y) / 2) * innerHeight, ndcX: _p.x, ndcY: _p.y };
@@ -735,4 +811,31 @@ window.__room = {
   getPeriod: () => T.name,
   project: (name) => project(points[name]),
   screenWidthPx: () => Math.abs(project(screen, 0.32).x - project(screen, -0.32).x),
+  has: (name) => Boolean(scene.getObjectByName(name)),
+  strayObjects: () => {
+    const box = new THREE.Box3();
+    const found = [];
+    scene.traverse((o) => {
+      if (!o.isMesh || !o.visible) return;
+      box.setFromObject(o);
+      if (box.min.x > 1.05 && box.max.y < 1.0) found.push(o.name || o.geometry.type);
+    });
+    return found;
+  },
+  worldPos: (name) => scene.getObjectByName(name).getWorldPosition(V(0, 0, 0)).toArray(),
+  sunDir: SUN_DIR.toArray(),
+  lightDir: () => sun.target.position.clone().sub(sun.position).normalize().toArray(),
+  sunDiscPx: () => toPixels(sunDisc.position),
+  windowRect: () => {
+    const a = toPixels(V(fx - WIN.w / 2, fy + WIN.h / 2, WALL_Z));
+    const b = toPixels(V(fx + WIN.w / 2, fy - WIN.h / 2, WALL_Z));
+    return { x0: a.x, y0: a.y, x1: b.x, y1: b.y };
+  },
+  shaftLine: (i = 1, from = 0.15, to = 0.6) => {
+    const d = shafts[i];
+    const at = (f) => toPixels(d.mesh.position.clone().addScaledVector(SUN_DIR, d.len * f));
+    return { from: at(from), to: at(to) };
+  },
+  setShafts: (on) => { for (const d of shafts) d.mesh.visible = on; },
+  shaftOpacity: () => shafts[0].mat.opacity,
 };

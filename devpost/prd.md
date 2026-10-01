@@ -70,11 +70,12 @@ Source: `scope.md > Inspiration & Identity`.
 **Avoid:** horror mood and heavy static. "It feels scary instead of nostalgic."
 
 **The room around the TV** (learner addition during the build, made in the final review; revised with the learner, designed first as an HTML mockup at `devpost/room-mockup.html` before touching the app):
-- A real 3D room built with three.js: a wall with a window, a desk, the TV, a VCR player beside it, an unbranded drink can, and a photo frame.
+- A real 3D room built with three.js: a wall with a window, a low cabinet, the TV, a VCR player on its right, and a photo frame on its left. (The first version's side table and drink can were removed after the learner marked up a screenshot.)
 - The camera turns slightly with the cursor, so the room feels three-dimensional. The VHS effects stay inside the TV screen.
-- The objects are simple 3D shapes made in code; AI-generated art is used only for the view outside the window (a day and a night picture), so light can really fall on the objects, the VCR can be clicked, and the can is guaranteed to carry no logo. AI art must carry no logos, trademarks, or watermarks, and it's credited in the README.
+- The objects are simple 3D shapes made in code; AI-generated art is used only for the view outside the window (a day and a night picture), so light can really fall on the objects and the VCR can be clicked. AI art must carry no logos, trademarks, or watermarks, and it's credited in the README.
 - Light follows the visitor's real local time: morning 05–10 warm and soft, day 10–15 bright, afternoon 15–18 orange, night 18–05 moonlit blue with the TV as the main light. Changes between periods are gradual. For the demo video, `?time=morning|day|afternoon|night` picks a period (learner agreed).
-- The photo in the frame is a fixed image chosen by the learner. Uploading your own photo is Later.
+- The sun is visible in the window's upper-left corner, and soft shafts of light run from the window down toward the TV along the same direction the real light travels (learner's drawing on a screenshot: orange = light source, yellow = light direction). The shafts fade out when the camera moves in on the TV so they never cover the screen.
+- The photo frame stands on the cabinet just left of the TV. The photo in the frame is a fixed image chosen by the learner. Uploading your own photo is Later.
 - On touch screens (no cursor) and with the browser's reduced-motion setting, the camera stays still (derived from the learner's reduced-motion rule).
 - Why: "I want to bring the atmosphere to life, so it feels more interactive and nicer to look at."
 
