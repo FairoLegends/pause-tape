@@ -68,7 +68,8 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
 ## Final Review
 
 - [ ] Playback screen rendered through a shader (learner choice 3): the blue screen and Playback drawn into a canvas so the shader can curve the picture and split its colors like shader.se, keeping the HTML version as the fallback and for clicks.
-- [ ] Room around the TV (learner request, built here): a layered room (wall with a window, desk, unbranded drink can, photo frame with a fixed photo) that moves opposite to the cursor, window light as its own layer, VHS effects kept inside the screen, still on touch screens and with reduced motion. The learner supplies the room art before this review; AI art must have no logos or watermarks and is credited in the README.
+- [ ] Room mockup approved (built and tested, waiting for the learner's review): `devpost/room-mockup.html` shows the three.js room (wall and window, desk, TV, VCR, unbranded can, photo frame), the camera turning with the cursor, light by real time of day with `?time=`, and the standby screen with "▶ 1 TAPE READY" and a glowing VCR that opens the shelf. The app isn't touched until the learner approves it.
+- [ ] Room around the TV built into the app from the approved mockup: VHS effects kept inside the screen, still on touch screens and with reduced motion. The learner supplies the two window pictures (day and night, from ChatGPT's free web app) and the photo; AI art must have no logos or watermarks and is credited in the README.
 - [ ] Final review complete — feedback resolved and learner confirms ready to ship
 
 ## Code Tour and App Map
@@ -87,4 +88,5 @@ Activity mode: not started
 
 - The ● REC, ■ STOP, and ▶ symbols are drawn as small CSS shapes instead of typed characters — VT323 has no glyphs for ●, ■, or ▶ (checked in the font's character map), so typed symbols would fall back to a different font on each computer.
 - Slice 3 uses a three.js shader layer (`js/crt.js`) with the planned CSS layer as its fallback, plus GSAP text motion (`js/motion.js`); a full shader-rendered Playback screen is added to the final review — the first hands-on checkpoint found the look "still too plain" against the learner's reference (shader.se), and the learner chose this path over CSS only.
+- The room is a three.js 3D scene designed first as an HTML mockup, the TV starts on a standby screen, and clicking the VCR opens the shelf — after trying slices 1–3 the learner wanted a livelier, more interactive look; Figma's MCP needs a paid plan, so the design step moved to an HTML mockup.
 - The Playback screen has a ■ STOP button that returns to the shelf without recording anything, the same as closing the page — a replayed tape shows no timer and no "I'm back on it" button, so without it there was no way back to the shelf.

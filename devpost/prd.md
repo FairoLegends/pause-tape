@@ -13,7 +13,7 @@ App interface language: English (`scope.md > Inspiration & Identity`).
 ## The Core Journey
 Source: `scope.md > The Core Loop`, `scope.md > What "Working" Looks Like`.
 
-1. **Open the app.** The whole app sits inside a CRT TV frame with scanlines. The first thing visible is the **Tape Shelf**.
+1. **Open the app.** The whole app sits inside a CRT TV frame with scanlines. The TV first shows a still **standby screen** with the tape status, e.g. **"▶ 1 TAPE READY"**, and the VCR beside the TV glows green when a tape is due. Clicking the VCR opens the **Tape Shelf** on the TV (learner revision during the build; see `Product Decisions`).
 2. **First use:** the shelf holds one blank tape reading **"Record your first tape"**, plus the **● REC** button.
 3. **Press ● REC.** The **Record Screen** opens: a camcorder-viewfinder look with a **● REC** indicator and a running timer at the top. On one screen: the tape label (project name, return date) and the four message questions.
 4. **Press ■ STOP.** If the required fields are filled in, the tape is saved and a short **"TAPE SAVED"** screen appears with an **"Add to calendar (.ics)"** button.
@@ -29,6 +29,7 @@ Source: `scope.md > The Core Loop`, `scope.md > What "Working" Looks Like`.
 ## Screens and Layout
 All screens live inside the same CRT TV frame.
 
+- **Standby screen** (what the TV shows first): a still screen with the tape status (e.g. "▶ 1 TAPE READY"); clicking the VCR opens the shelf.
 - **Tape Shelf** (home): the rack of tapes plus the **● REC** button. Each tape's label shows the project name and return date, plus a state (see `Features and Behavior > Tape Shelf`).
 - **Record Screen**: camcorder viewfinder with **● REC** and a running timer at the top. Label fields (project name, return date) and the four message questions on one screen. **■ STOP** saves.
 - **Tape Saved Screen**: brief "TAPE SAVED" confirmation with the **"Add to calendar (.ics)"** button, then back to the shelf.
@@ -68,13 +69,13 @@ Source: `scope.md > Inspiration & Identity`.
 
 **Avoid:** horror mood and heavy static. "It feels scary instead of nostalgic."
 
-**The room around the TV** (learner addition during the build, made in the final review):
-- The TV stands in a room: a wall with a window, a desk, and props beside the TV, such as an unbranded drink can and a photo frame.
-- The room's layers move opposite to the cursor (parallax), so it feels like a 3D space. The VHS effects stay inside the TV screen.
-- Light from the window falls across the room as its own layer.
+**The room around the TV** (learner addition during the build, made in the final review; revised with the learner, designed first as an HTML mockup at `devpost/room-mockup.html` before touching the app):
+- A real 3D room built with three.js: a wall with a window, a desk, the TV, a VCR player beside it, an unbranded drink can, and a photo frame.
+- The camera turns slightly with the cursor, so the room feels three-dimensional. The VHS effects stay inside the TV screen.
+- The objects are simple 3D shapes made in code; AI-generated art is used only for the view outside the window (a day and a night picture), so light can really fall on the objects, the VCR can be clicked, and the can is guaranteed to carry no logo. AI art must carry no logos, trademarks, or watermarks, and it's credited in the README.
+- Light follows the visitor's real local time: morning 05–10 warm and soft, day 10–15 bright, afternoon 15–18 orange, night 18–05 moonlit blue with the TV as the main light. Changes between periods are gradual. For the demo video, `?time=morning|day|afternoon|night` picks a period (learner agreed).
 - The photo in the frame is a fixed image chosen by the learner. Uploading your own photo is Later.
-- Room art may be AI-generated (for example with Higgsfield), with no brand logos, trademarks, or watermarks, and it's credited in the README.
-- On touch screens (no cursor) and with the browser's reduced-motion setting, the room stays still (derived from the learner's reduced-motion rule).
+- On touch screens (no cursor) and with the browser's reduced-motion setting, the camera stays still (derived from the learner's reduced-motion rule).
 - Why: "I want to bring the atmosphere to life, so it feels more interactive and nicer to look at."
 
 ## Features and Behavior
@@ -92,7 +93,7 @@ Tape states, readable at a glance by color:
 **Shelf order:** READY tapes first, then locked tapes with the nearest return date first, then completed tapes last.
 
 - As the learner, I want to see all my paused projects as tapes so that when I return I immediately see where to start.
-  - [ ] Opening the app shows the Tape Shelf first, inside the CRT frame with scanlines.
+  - [ ] Opening the app shows the standby screen inside the CRT frame with scanlines, with the tape status (e.g. "▶ 1 TAPE READY"); the VCR glows green when a tape is due, and clicking the VCR opens the Tape Shelf.
   - [ ] With no tapes, the shelf shows one blank tape reading "Record your first tape" and the ● REC button.
   - [ ] Each tape label shows the project name and return date.
   - [ ] A tape with a future return date appears dim gray with a countdown in days.
@@ -202,7 +203,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - **Persistence** — tapes, including their answers and recorded minutes, remain after closing and reopening the app.
 
 ## Product Decisions
-- **Shelf is the home screen** — on return, "I immediately see the tape I recorded before, so I know what to do."
+- **The TV starts on a standby screen, and clicking the VCR opens the shelf** (revised during the build; this replaces "the shelf is the first screen") — the standby screen still shows the status, e.g. "▶ 1 TAPE READY", and the VCR glows green when a tape is due, "so I still know right away that a tape is waiting, and opening the shelf feels like turning on a real VCR." The original reason still holds: on return, "I immediately see the tape I recorded before, so I know what to do."
 - **Recording is one screen, not steps** — six separate steps feel slow in use and in the demo video.
 - **● REC / ■ STOP / ▶ PLAY / ▶▶ vocabulary** — recording and playing should feel like a camcorder and VCR.
 - **Only project name, return date, and first step are required** — without them the tape can't work; the rest shouldn't be forced.
@@ -221,7 +222,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - **Closing the app mid-timer records nothing; the tape stays READY and replays from the start** — learner's addition.
 - **A locked tape played early and interrupted returns to locked** — "its return date still hasn't arrived."
 - **Two typefaces, color = status, effects carry meaning** — see `Look and Feel`.
-- **A room around the TV with cursor parallax and window light, built in the final review; a fixed photo in the frame for now** — see `Look and Feel`.
+- **A real 3D room around the TV (three.js), the camera turning with the cursor, light following the real time of day, built in the final review; AI art only for the window view; a fixed photo in the frame** — see `Look and Feel`.
 
 **Assumptions (not learner decisions yet):**
 - None remaining.
@@ -236,7 +237,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - Replay of completed tapes without timer.
 - Tapes persist between visits.
 - The Look and Feel above: CRT frame, scanlines varying by screen, two typefaces, status colors.
-- The room around the TV (built in the final review): a layered room with cursor parallax, window light, and props, with a fixed photo in the frame.
+- The room around the TV (built in the final review): a 3D room with the camera turning with the cursor, light by time of day, a clickable VCR that opens the shelf, an unbranded can, and a photo frame with a fixed photo.
 
 ## Deferred From the POC
 - **Archiving and deleting tapes** — the learner moved these to Later; the demo doesn't need them.
