@@ -216,6 +216,7 @@ BuildWithAI-Basics/
 │       └── OFL.txt              # The font's license, kept with the file
 │   └── vendor/                  # three.js (MIT, with its LICENSE) and GSAP (notices kept in the files)
 ├── LICENSE               # MIT, the project's own open source license (required by the rules)
+├── THIRD_PARTY_NOTICES.md  # Licenses of the bundled font and libraries
 ├── README.md             # What it is, how to run locally, live link, known limitations (calendar findings)
 ├── .gitignore            # Already exists: keeps devpost/learner-profile.md and .env files out
 ├── devpost/              # Devpost learning workspace (planning docs)
