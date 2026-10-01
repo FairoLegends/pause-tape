@@ -57,7 +57,7 @@ const FRAGMENT = /* glsl */ `
     float bandY = fract(t * 0.07);
     float d = abs(uv.y - bandY);
     d = min(d, 1.0 - d);
-    float band = smoothstep(0.045, 0.0, d) * (0.04 + 0.12 * v) * uMotion;
+    float band = (1.0 - smoothstep(0.0, 0.045, d)) * (0.04 + 0.12 * v) * uMotion;
     float bandNoise = band * (0.6 + 0.8 * hash(vec2(floor(px.y / 2.0), floor(t * 30.0))));
 
     // Chroma fringe: red on the left edge of the screen, blue on the right, like a worn tape.
@@ -71,7 +71,7 @@ const FRAGMENT = /* glsl */ `
     float vigA = vig * (0.35 + 0.25 * v);
 
     // Glass glare: a faint diagonal sheen in the top left.
-    float glare = smoothstep(0.55, 0.0, length((uv - vec2(0.18, 0.86)) * vec2(1.0, 1.6))) * 0.05;
+    float glare = (1.0 - smoothstep(0.0, 0.55, length((uv - vec2(0.18, 0.86)) * vec2(1.0, 1.6)))) * 0.05;
 
     // Slow, soft flicker: several seconds per cycle, small amplitude, never blinking.
     float flicker = (0.5 + 0.5 * sin(t * 1.3)) * 0.025 * v * uMotion;
@@ -104,7 +104,7 @@ export async function startCrt(screenEl, { getVhs, reducedMotion }) {
   } catch {
     return null; // The library or the GPU failed: keep the CSS layer.
   }
-  const { Scene, OrthographicCamera, PlaneGeometry, Mesh, ShaderMaterial, Vector2 } = THREE;
+  const { Scene, OrthographicCamera, BufferGeometry, Float32BufferAttribute, Mesh, ShaderMaterial, Vector2 } = THREE;
   const canvas = renderer.domElement;
   canvas.className = 'crt';
   canvas.setAttribute('aria-hidden', 'true');
@@ -119,7 +119,13 @@ export async function startCrt(screenEl, { getVhs, reducedMotion }) {
     uRes: { value: new Vector2(1, 1) },
   };
   const material = new ShaderMaterial({ vertexShader: VERTEX, fragmentShader: FRAGMENT, uniforms, transparent: true, depthTest: false });
-  scene.add(new Mesh(new PlaneGeometry(2, 2), material));
+  // One oversized triangle covers the whole screen, so there's no seam where two triangles meet.
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+  const quad = new Mesh(geometry, material);
+  quad.frustumCulled = false;
+  scene.add(quad);
 
   function resize() {
     const r = screenEl.getBoundingClientRect();
