@@ -34,8 +34,9 @@ const _ndc = new THREE.Vector2();
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // Layout in metres: x to the right, y up, z toward the viewer. The back wall is at WALL_Z.
-// Left to right along the back wall: bookshelf, window, TV cabinet, plant. In the room: a sofa on the left
-// and an armchair on the right, both turned toward the TV, and a low table with books and papers between them.
+// Left to right along the back wall: bookshelf, window, TV cabinet, grandfather clock; paintings on the empty
+// walls. In the room: a sofa (left) and an armchair (right) facing each other across a table with books, and a
+// long low sofa in front of the table facing the TV.
 const WALL_Z = -2.0;
 const WIN = { x: -0.85, y: 1.9, w: 1.0, h: 0.95 }; // the sill plate (y 1.38..1.43) clears the TV top (~1.29)
 const fx = WIN.x;
@@ -43,7 +44,7 @@ const fy = WIN.y;
 
 // Camera poses: the whole room, the room on a phone, and close to the TV once the shelf is open.
 const POSES = {
-  desktop: { pos: V(-0.1, 1.5, 2.6), look: V(-0.1, 1.1, -1.4) },
+  desktop: { pos: V(-0.1, 1.75, 2.7), look: V(-0.1, 1.05, -1.4) },
   portrait: { pos: V(-0.2, 1.25, 2.9), look: V(-0.2, 1.3, -1.4) }, // nudged left so the window, the curtain and the TV are all in frame
   tv: { pos: V(-0.3, 0.95, 0.0), look: V(-0.3, 0.93, -1.12), close: 1 },
   // Pulled back a little, so the VCR shows while the tape goes in and the TV loads.
@@ -753,37 +754,47 @@ function makeBookshelf() {
 }
 const bookshelf = makeBookshelf();
 
-// Sofa on the left, out in the room and turned toward the TV, so the bookshelf stays free to reach
-// (a sofa pushed against a shelf blocks it). Rounded shapes keep it semi-cartoon.
-const TV_SPOT = V(-0.3, 0, -1.4); // where the seats look at
-// Turned most of the way toward the TV (a full turn would show the camera only their backs).
-function faceTv(g, amount = 0.6) { g.rotation.y = amount * Math.atan2(TV_SPOT.x - g.position.x, TV_SPOT.z - g.position.z); }
-function makeSofa() {
+// Seating around the table, like a real living room: a sofa on the left facing right and an
+// armchair on the right facing left (they face each other across the table), and a long low sofa in
+// front of the table facing the TV. The long sofa sits a little to the left, which leaves a clear
+// walkway on the right into the TV corner. Nothing stands between the camera and the photo frame.
+function makeSofa(name, width, color, cushionColor, backH = 0.42) {
   const g = new THREE.Group();
-  g.name = 'sofa';
-  g.position.set(-1.3, 0, -0.66); // floor left free between it and the shelf
-  faceTv(g);
+  g.name = name;
   scene.add(g);
-  const fabric = std(0x3e7c80, 0.92);
-  const cushion = std(0x4a8c90, 0.92);
+  const fabric = std(color, 0.92);
+  const cushion = std(cushionColor, 0.92);
   const leg = std(0x4a3222, 0.6);
-  for (const [lx, lz] of [[-0.44, -0.29], [0.44, -0.29], [-0.44, 0.29], [0.44, 0.29]]) box(0.05, 0.1, 0.05, leg, lx, 0.05, lz, g);
-  box(1.0, 0.22, 0.72, fabric, 0, 0.21, 0, g, 0.05); // base
-  box(1.0, 0.5, 0.18, fabric, 0, 0.6, -0.27, g, 0.06); // back
-  for (const ax of [-0.43, 0.43]) box(0.14, 0.4, 0.72, fabric, ax, 0.5, 0, g, 0.06); // arms
-  for (const cx of [-0.2, 0.2]) box(0.38, 0.13, 0.5, cushion, cx, 0.39, 0.08, g, 0.05); // seat cushions
-  for (const cx of [-0.2, 0.2]) box(0.38, 0.34, 0.12, cushion, cx, 0.61, -0.14, g, 0.05).rotation.x = -0.2; // back cushions
-  box(0.24, 0.24, 0.09, std(0xb5654a, 0.9), 0.3, 0.55, -0.02, g, 0.04).rotation.set(-0.1, -0.35, 0.15); // a pillow
+  const hw = width / 2;
+  for (const [lx, lz] of [[-hw + 0.06, -0.29], [hw - 0.06, -0.29], [-hw + 0.06, 0.29], [hw - 0.06, 0.29]]) box(0.05, 0.1, 0.05, leg, lx, 0.05, lz, g);
+  box(width, 0.22, 0.72, fabric, 0, 0.21, 0, g, 0.05); // base
+  box(width, backH, 0.18, fabric, 0, 0.32 + backH / 2, -0.27, g, 0.06); // back
+  for (const ax of [-hw + 0.07, hw - 0.07]) box(0.14, 0.34, 0.72, fabric, ax, 0.47, 0, g, 0.06); // arms
+  const seats = Math.round((width - 0.28) / 0.4);
+  const sw = (width - 0.28) / seats;
+  for (let i = 0; i < seats; i++) {
+    const cx = -hw + 0.14 + sw * (i + 0.5);
+    box(sw - 0.02, 0.13, 0.5, cushion, cx, 0.39, 0.08, g, 0.05); // seat cushion
+    box(sw - 0.02, backH * 0.66, 0.12, cushion, cx, 0.46 + backH * 0.26, -0.15, g, 0.05).rotation.x = -0.2; // back cushion
+  }
   return g;
 }
-const sofa = makeSofa();
+const sofa = makeSofa('sofa', 1.0, 0x3e7c80, 0x4a8c90);
+sofa.position.set(-1.5, 0, -0.72);
+sofa.rotation.y = Math.PI / 2; // faces right, toward the armchair
+box(0.24, 0.24, 0.09, std(0xb5654a, 0.9), 0.28, 0.55, -0.04, sofa, 0.04).rotation.set(-0.1, -0.35, 0.15); // a pillow
 
-// Armchair on the right, turned toward the TV as well.
+// A low back, so the table, the cabinet and the photo frame stay in view over it.
+const longSofa = makeSofa('longSofa', 1.3, 0x3e7c80, 0x4a8c90, 0.24);
+longSofa.position.set(-0.5, 0, 0.0);
+longSofa.rotation.y = Math.PI; // faces the TV, its back to the camera
+
+// Armchair on the right, facing the sofa across the table.
 function makeArmchair() {
   const g = new THREE.Group();
   g.name = 'armchair';
-  g.position.set(1.4, 0, -0.98);
-  faceTv(g);
+  g.position.set(1.1, 0, -0.72);
+  g.rotation.y = -Math.PI / 2; // faces left
   scene.add(g);
   const fabric = std(0xc98a4b, 0.9);
   const cushion = std(0xd99c5c, 0.9);
@@ -802,8 +813,8 @@ const armchair = makeArmchair();
 function makeTable() {
   const g = new THREE.Group();
   g.name = 'table';
-  g.position.set(-0.2, 0, -0.66);
-  g.rotation.y = 0.06;
+  g.position.set(-0.2, 0, -0.68);
+  g.rotation.y = 0.04;
   scene.add(g);
   const wood = std(0x9a6b42, 0.6);
   box(0.95, 0.04, 0.5, wood, 0, 0.38, 0, g, 0.012); // top
@@ -865,35 +876,194 @@ const rugTex = canvasTexture(512, 320, (g, w, h) => {
     g.fill();
   }
 });
-const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), std(0xffffff, 1, 0, { map: rugTex.texture }));
+const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 2.1), std(0xffffff, 1, 0, { map: rugTex.texture }));
 rug.rotation.x = -Math.PI / 2;
-rug.position.set(-0.15, 0.006, -0.75);
+rug.position.set(-0.25, 0.006, -0.52);
 rug.receiveShadow = true;
 scene.add(rug);
 
-// A floor plant in the right corner, behind the armchair.
-const plant = new THREE.Group();
-plant.name = 'plant';
-plant.position.set(1.75, 0, -1.68); // in the corner, behind the armchair
-plant.scale.setScalar(1.15);
-scene.add(plant);
-const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.28, 24), std(0x9a5b3c, 0.8));
-pot.position.y = 0.14;
-pot.castShadow = true;
-plant.add(pot);
-{
-  const r = rng(5);
-  for (let i = 0; i < 11; i++) {
-    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), std(i % 2 ? 0x2f5d33 : 0x3f7a40, 0.9));
-    leaf.scale.set(0.5, 1.5, 0.25);
-    const a = (i / 11) * Math.PI * 2;
-    leaf.position.set(Math.cos(a) * 0.1, 0.5 + r() * 0.22, Math.sin(a) * 0.1);
-    leaf.rotation.set(Math.sin(a) * 0.5, a, Math.cos(a) * 0.5);
-    leaf.castShadow = true;
-    plant.add(leaf);
+// A classic grandfather clock on the floor right of the TV cabinet, against the wall (from the
+// learner's photo: carved teak case, arched crown with a carved crest, cream dial with gold numerals,
+// a glass door showing a brass pendulum and three brass weights, a carved panel at the bottom). The
+// hands show the visitor's real time; the pendulum swings once a second.
+const clockGroup = new THREE.Group();
+clockGroup.name = 'clock';
+const CLOCK_W = 0.48;
+const CLOCK_D = 0.3;
+clockGroup.position.set(1.62, 0, WALL_Z + wt / 2 + CLOCK_D / 2 + 0.01);
+scene.add(clockGroup);
+const carveTex = canvasTexture(256, 512, (g, w, h) => { // carved teak: grain, then a vine relief
+  const r = rng(31);
+  const grd = g.createLinearGradient(0, 0, w, 0);
+  grd.addColorStop(0, '#8a4f22');
+  grd.addColorStop(0.5, '#b0702f');
+  grd.addColorStop(1, '#8a4f22');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 60; i++) {
+    g.strokeStyle = `rgba(60,25,5,${0.05 + r() * 0.08})`;
+    g.beginPath();
+    const x = r() * w;
+    g.moveTo(x, 0);
+    g.bezierCurveTo(x + 8, h * 0.3, x - 8, h * 0.6, x + 4, h);
+    g.stroke();
   }
+});
+const teak = std(0xffffff, 0.55, 0.05, { map: carveTex.texture });
+const reliefTex = canvasTexture(128, 512, (g, w, h) => { // the carved side pillars: stacked leaves
+  g.fillStyle = '#9a5c27';
+  g.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 42) {
+    for (const [dx, flip] of [[0.3, -1], [0.7, 1]]) {
+      g.fillStyle = 'rgba(55,22,5,0.55)';
+      g.beginPath();
+      g.ellipse(w * dx, y + 21, 16, 9, flip * 0.6, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = 'rgba(230,170,100,0.35)';
+      g.beginPath();
+      g.ellipse(w * dx - 2, y + 18, 11, 5, flip * 0.6, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = 'rgba(55,22,5,0.6)';
+    g.fillRect(w * 0.47, y, w * 0.06, 42);
+  }
+});
+const relief = std(0xffffff, 0.6, 0.05, { map: reliefTex.texture });
+const brassMat = std(0xd8b04a, 0.25, 0.9);
+{
+  const H = 1.95;
+  const g = clockGroup;
+  box(CLOCK_W + 0.04, 0.06, CLOCK_D + 0.03, teak, 0, 0.03, 0, g, 0.01); // plinth
+  box(CLOCK_W, H - 0.3, CLOCK_D, teak, 0, 0.06 + (H - 0.3) / 2, 0, g, 0.01); // case
+  for (const sx of [-1, 1]) box(0.075, H - 0.32, 0.04, relief, sx * (CLOCK_W / 2 - 0.035), 0.07 + (H - 0.32) / 2, CLOCK_D / 2 + 0.01, g, 0.008); // carved pillars
+  // arched hood with a carved crest
+  const hoodY = H - 0.24;
+  box(CLOCK_W + 0.05, 0.05, CLOCK_D + 0.04, teak, 0, hoodY, 0.0, g, 0.01);
+  const arch = new THREE.Mesh(new THREE.CylinderGeometry(CLOCK_W / 2 + 0.02, CLOCK_W / 2 + 0.02, CLOCK_D + 0.02, 32, 1, false, -Math.PI / 2, Math.PI), teak);
+  arch.rotation.x = -Math.PI / 2; // the half-cylinder's round side up
+  arch.position.set(0, hoodY + 0.02, 0);
+  arch.scale.set(1, 1, 0.55);
+  arch.castShadow = true;
+  g.add(arch);
+  const crestShape = new THREE.Shape();
+  crestShape.moveTo(-0.14, 0);
+  crestShape.bezierCurveTo(-0.1, 0.06, -0.05, 0.03, -0.03, 0.08);
+  crestShape.bezierCurveTo(-0.02, 0.12, 0.02, 0.12, 0.03, 0.08);
+  crestShape.bezierCurveTo(0.05, 0.03, 0.1, 0.06, 0.14, 0);
+  crestShape.lineTo(-0.14, 0);
+  const crest = new THREE.Mesh(new THREE.ExtrudeGeometry(crestShape, { depth: 0.03, bevelEnabled: true, bevelSize: 0.006, bevelThickness: 0.006, bevelSegments: 2 }), relief);
+  crest.position.set(0, hoodY + 0.02 + (CLOCK_W / 2 + 0.02) * 0.55 - 0.025, CLOCK_D / 2 - 0.03); // on top of the squashed arch
+  crest.castShadow = true;
+  g.add(crest);
+  // dial: a carved ring, cream face, gold numerals, hands
+  const dialY = H - 0.42;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.022, 10, 40), relief);
+  ring.position.set(0, dialY, CLOCK_D / 2 + 0.012);
+  g.add(ring);
+  const faceTex = canvasTexture(256, 256, (c, w, h) => {
+    const grd = c.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w / 2);
+    grd.addColorStop(0, '#fbf3c8');
+    grd.addColorStop(1, '#e8d58e');
+    c.fillStyle = grd;
+    c.beginPath();
+    c.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = '#b8902e';
+    c.lineWidth = 4;
+    c.beginPath();
+    c.arc(w / 2, h / 2, w / 2 - 22, 0, Math.PI * 2);
+    c.stroke();
+    c.fillStyle = '#9a7420';
+    c.font = 'bold 22px Georgia, serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const roman = ['XII', 'I', 'II', 'III', 'IIII', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+    roman.forEach((n, i) => {
+      const a = (i / 12) * Math.PI * 2;
+      c.fillText(n, w / 2 + Math.sin(a) * (w / 2 - 44), h / 2 - Math.cos(a) * (h / 2 - 44));
+    });
+  });
+  const face = new THREE.Mesh(new THREE.CircleGeometry(0.145, 40), new THREE.MeshStandardMaterial({ map: faceTex.texture, roughness: 0.5 }));
+  face.position.set(0, dialY, CLOCK_D / 2 + 0.006);
+  g.add(face);
+  const hand = (len, wdt) => {
+    const geo = new THREE.BoxGeometry(wdt, len, 0.004);
+    geo.translate(0, len / 2 - 0.012, 0);
+    const m = new THREE.Mesh(geo, std(0x1a1410, 0.4, 0.5));
+    m.position.set(0, dialY, CLOCK_D / 2 + 0.012);
+    g.add(m);
+    return m;
+  };
+  clockGroup.userData.hourHand = hand(0.075, 0.01);
+  clockGroup.userData.minuteHand = hand(0.11, 0.007);
+  // glass door with a carved arch, the pendulum and three weights behind it
+  const doorY = 0.98;
+  const doorH = 0.72;
+  box(CLOCK_W - 0.15, doorH + 0.05, 0.02, relief, 0, doorY, CLOCK_D / 2 + 0.005, g, 0.006); // door frame
+  const inside = new THREE.Mesh(new THREE.PlaneGeometry(CLOCK_W - 0.2, doorH), std(0x5a2f12, 0.8));
+  inside.position.set(0, doorY, CLOCK_D / 2 + 0.017);
+  g.add(inside);
+  const swing = new THREE.Group(); // pivot at the top of the door
+  swing.position.set(0, doorY + doorH / 2 - 0.03, CLOCK_D / 2 + 0.03);
+  g.add(swing);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.5, 6), brassMat);
+  rod.position.y = -0.25;
+  const bob = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.012, 28), brassMat);
+  bob.rotation.x = Math.PI / 2;
+  bob.position.y = -0.52;
+  swing.add(rod, bob);
+  clockGroup.userData.pendulum = swing;
+  for (const [wx, wy] of [[-0.075, 0.12], [0.075, 0.12], [0, 0.04]]) {
+    const wgt = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.15, 16), brassMat);
+    wgt.position.set(wx, doorY + wy, CLOCK_D / 2 + 0.045);
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, doorH / 2 - wy - 0.05, 4), brassMat);
+    chain.position.set(wx, doorY + wy + (doorH / 2 - wy) / 2 + 0.05, CLOCK_D / 2 + 0.045);
+    g.add(wgt, chain);
+  }
+  const glassPane = noPick(new THREE.Mesh(new THREE.PlaneGeometry(CLOCK_W - 0.2, doorH), new THREE.MeshBasicMaterial({ map: sheen.texture, transparent: true, opacity: 0.45, depthWrite: false })));
+  glassPane.position.set(0, doorY, CLOCK_D / 2 + 0.08);
+  g.add(glassPane);
+  box(0.016, 0.03, 0.012, brassMat, -(CLOCK_W - 0.15) / 2 + 0.02, doorY, CLOCK_D / 2 + 0.02, g); // door knob
+  // carved panel at the bottom
+  box(CLOCK_W - 0.15, 0.26, 0.025, relief, 0, 0.3, CLOCK_D / 2 + 0.008, g, 0.01);
+}
+function updateClock(t) {
+  const d = new Date();
+  const min = d.getMinutes() + d.getSeconds() / 60;
+  const hr = (d.getHours() % 12) + min / 60;
+  clockGroup.userData.minuteHand.rotation.z = -(min / 60) * Math.PI * 2;
+  clockGroup.userData.hourHand.rotation.z = -(hr / 12) * Math.PI * 2;
+  clockGroup.userData.pendulum.rotation.z = reduced.matches ? 0 : Math.sin(t * Math.PI) * 0.12; // one swing a second
 }
 
+// Paintings on the empty walls: two on the back wall right of the window, one on the left side
+// wall. The pictures are the learner's AI paintings (Seedream 5.0 pro); a wooden frame each.
+const paintings = [];
+function makePainting(file, w, h, place) {
+  const g = new THREE.Group();
+  g.name = `painting-${file}`;
+  const frameMat = std(0x6b4423, 0.55, 0.05);
+  const t = 0.045;
+  box(w + 2 * t, t, 0.035, frameMat, 0, h / 2 + t / 2, 0, g, 0.008);
+  box(w + 2 * t, t, 0.035, frameMat, 0, -h / 2 - t / 2, 0, g, 0.008);
+  box(t, h, 0.035, frameMat, -w / 2 - t / 2, 0, 0, g, 0.008);
+  box(t, h, 0.035, frameMat, w / 2 + t / 2, 0, 0, g, 0.008);
+  const canvasMat = std(0xd8cdb4, 0.85);
+  const pic = new THREE.Mesh(new THREE.PlaneGeometry(w, h), canvasMat);
+  pic.position.z = 0.004;
+  pic.receiveShadow = true;
+  g.add(pic);
+  loader.load(`../assets/room/${file}`, (tex) => { tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4; canvasMat.map = tex; canvasMat.color.set(0xffffff); canvasMat.needsUpdate = true; }, undefined, () => {});
+  place(g);
+  scene.add(g);
+  paintings.push(g);
+  return g;
+}
+// Back wall, right of the window (above the VCR and the lamp): the mountain, then the flowers.
+makePainting('painting-gunung.jpg', 0.72, 0.54, (g) => g.position.set(0.45, 1.86, WALL_Z + wt / 2 + 0.02));
+makePainting('painting-bunga.jpg', 0.33, 0.44, (g) => g.position.set(1.1, 1.86, WALL_Z + wt / 2 + 0.02));
+// Left side wall, beside the bookshelf: the rice terraces.
+makePainting('painting-sawah.jpg', 0.7, 0.53, (g) => { g.position.set(-2.6 + 0.02, 1.62, -1.45); g.rotation.y = Math.PI / 2; });
 // ── Lights ────────────────────────────────────────────────────────────
 
 // One direction for everything that is "the sun": the light itself, the visible shafts and the
@@ -1448,6 +1618,7 @@ renderer.setAnimationLoop((now) => {
     setMode('play');
   }
   updateCord(dt);
+  updateClock(t);
   const amount = 1 - 0.6 * z;
   offset.copy(camPos).sub(camLook).applyAxisAngle(Y_AXIS, aim.x * 0.13 * amount);
   offset.y += aim.y * 0.12 * amount;
@@ -1544,7 +1715,8 @@ renderer.setAnimationLoop((now) => {
 });
 
 // For the automated checks.
-const named = { vcr: vcrShell, screen, frame, lamp, sofa, armchair, table, bookshelf, plant, window: windowGroup, cabinet: cabBody };
+const named = { vcr: vcrShell, screen, frame, lamp, sofa, longSofa, armchair, table, bookshelf, clock: clockGroup, window: windowGroup, cabinet: cabBody,
+  paintingLeft: paintings[2], paintingRight: paintings[0], paintingFlowers: paintings[1] };
 const _part = new THREE.Box3();
 // Bounding box of the solid meshes only: glows, light shafts and invisible click boxes don't count.
 function solidBox(root) {
@@ -1557,6 +1729,27 @@ function solidBox(root) {
     b.union(_part.copy(o.isInstancedMesh ? o.boundingBox : o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
   });
   return b;
+}
+function blockedBy(target) {
+  const hitNames = {};
+  const b = new THREE.Box3().setFromObject(target);
+  const rc = new THREE.Raycaster();
+  let n = 0;
+  for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
+    const p = V(b.min.x + (b.max.x - b.min.x) * i / 4, b.min.y + (b.max.y - b.min.y) * j / 4, (b.min.z + b.max.z) / 2);
+    const dir = p.clone().sub(camera.position);
+    const dist = dir.length();
+    rc.set(camera.position, dir.normalize());
+    rc.far = dist - 0.03;
+    const hits = rc.intersectObjects(scene.children, true).filter((h) => h.object.raycast !== NOOP && h.object.material?.visible !== false && h.object !== target);
+    n++;
+    if (hits.length) {
+      let o = hits[0].object;
+      while (o.parent && o.parent !== scene) o = o.parent;
+      hitNames[o.name || 'unnamed'] = (hitNames[o.name || 'unnamed'] ?? 0) + 1;
+    }
+  }
+  return { points: n, blocked: hitNames };
 }
 const _p = V(0, 0, 0);
 function toPixels(v) {
@@ -1586,6 +1779,9 @@ window.__room = {
   },
   cord: () => ({ ext: cord.ext, held: cord.held, swing: cord.swing }),
   rotY: (name) => named[name].rotation.y,
+  // Which objects stand between the camera and a target: rays to a grid of points on it.
+  frameBlockedBy: () => blockedBy(pic),
+  screenBlockedBy: () => blockedBy(screen),
   tableItems: () => { let books = 0, papers = 0; table.traverse((o) => { if (o.userData.kind === 'book') books++; if (o.userData.kind === 'paper') papers++; }); return { books, papers }; },
   photoMatchesPreview: () => { // compare the frame texture and the preview at a few points (same crop)
     if (!photoImg) return false;
