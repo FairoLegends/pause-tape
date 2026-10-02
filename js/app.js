@@ -134,12 +134,42 @@ show('shelf');
 
 // The room around the TV (prd.md > The room around the TV): a laptop or desktop window with WebGL.
 // On a phone, or if anything fails, the app stays the flat TV above, which works on its own.
+// While the room loads, a VCR-style loading screen shows how far along it is and roughly how long
+// is left (from the speed so far), so a slow connection never looks frozen.
+const loading = document.querySelector('[data-room-loading]');
+function showLoading(fraction, startedAt) {
+  loading.hidden = false;
+  const pct = Math.round(fraction * 100);
+  loading.querySelector('[data-room-loading-pct]').textContent = `${pct}%`;
+  const cells = loading.querySelectorAll('.room-loading__cell');
+  cells.forEach((c, i) => c.classList.toggle('is-on', i < Math.round(fraction * cells.length)));
+  const secs = (performance.now() - startedAt) / 1000;
+  const left = fraction > 0.05 ? Math.max(0, Math.ceil((secs / fraction) * (1 - fraction))) : null;
+  loading.querySelector('[data-room-loading-eta]').textContent = left == null ? 'ESTIMATING…' : left <= 1 ? 'ALMOST THERE' : `ABOUT ${left} S LEFT`;
+}
 async function startRoomIfPossible() {
   const probe = document.createElement('canvas');
   const gl = probe.getContext('webgl2') || probe.getContext('webgl');
-  if (!gl || window.innerWidth < 700 || new URLSearchParams(location.search).has('flat')) return;
+  const asked = new URLSearchParams(location.search).has('flat');
+  if (!gl && !asked && window.innerWidth >= 700 && window.matchMedia('(pointer: fine)').matches) {
+    // No WebGL: the app works as the flat TV; say so once, quietly.
+    const note = document.querySelector('[data-no-webgl]');
+    note.hidden = false;
+    setTimeout(() => { note.hidden = true; }, 6000);
+  }
+  // The room is for laptops and desktops: a mouse (or trackpad) and a window of at least 700 x 500.
+  // A phone, even on its side, keeps the flat TV, which fits a small screen and works by touch.
+  const desktop = window.matchMedia('(pointer: fine)').matches && window.innerWidth >= 700 && window.innerHeight >= 500;
+  if (!gl || !desktop || asked) return;
+  const startedAt = performance.now();
+  // Two thirds of the wait is the room's code (three.js and the scene), the rest its pictures.
+  showLoading(0.02, startedAt);
+  const tick = setInterval(() => { const f = Math.min(0.6, (performance.now() - startedAt) / 4000); showLoading(f, startedAt); }, 120);
   try {
     const mod = await import('./room.js');
+    clearInterval(tick);
+    await mod.roomReady((done, total) => showLoading(0.65 + 0.35 * (total ? done / total : 0), startedAt));
+    showLoading(1, startedAt);
     // In the room, the blue loading screen runs about 3 s and the camera eases in when it ends
     // (learner request for the VHS mode); the flat TV keeps its shorter 1.2 s.
     PACE.blueMs = 3000;
@@ -147,7 +177,11 @@ async function startRoomIfPossible() {
     room = mod.startRoom({ onLeave: () => show('shelf', { force: true }) });
     mod.setupCrtBend();
     document.documentElement.classList.add('has-room');
+    loading.classList.add('is-done'); // fades out (0.5 s) and lets clicks through right away
+    setTimeout(() => { loading.hidden = true; loading.classList.remove('is-done'); }, 600);
   } catch (err) {
+    clearInterval(tick);
+    loading.hidden = true;
     // Put the screen back in the flat TV if the room had already taken it.
     const tvEl = document.querySelector('main.tv');
     const screenEl = document.querySelector('.tv__screen');

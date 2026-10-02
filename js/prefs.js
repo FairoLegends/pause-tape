@@ -9,7 +9,7 @@ const systemContrast = globalThis.matchMedia?.('(prefers-contrast: more)');
 
 function load() {
   try {
-    const p = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    const p = JSON.parse(globalThis.localStorage?.getItem(KEY) ?? '{}');
     return p && typeof p === 'object' ? p : {};
   } catch {
     return {};
@@ -31,7 +31,7 @@ export function soundOn() {
 
 export function setPref(name, value) {
   prefs = { ...prefs, [name]: value };
-  try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* storage blocked: it still applies for this visit */ }
+  try { globalThis.localStorage?.setItem(KEY, JSON.stringify(prefs)); } catch { /* storage blocked: it still applies for this visit */ }
   apply();
 }
 
@@ -41,11 +41,22 @@ export function onPrefsChange(fn) {
 
 // The page reads these as classes on <html>, so CSS can switch animations off and raise contrast.
 function apply() {
-  const root = document.documentElement;
+  const root = globalThis.document?.documentElement;
+  if (!root) return; // outside a page (the Node checks of the pure modules): nothing to style
   root.classList.toggle('reduce-motion', reducedMotion());
   root.classList.toggle('high-contrast', highContrast());
   for (const fn of listeners) fn();
 }
 systemReduced?.addEventListener?.('change', apply);
 systemContrast?.addEventListener?.('change', apply);
+// Some browsers don't send "change" for every switch of the system setting, so look again now and
+// then too (cheap: two media queries), and whenever the window comes back into focus.
+let last = '';
+function recheck() {
+  const now = `${reducedMotion()}|${highContrast()}`;
+  if (now !== last) { last = now; apply(); }
+}
+if (globalThis.document) setInterval(recheck, 500);
+globalThis.addEventListener?.('focus', recheck);
 apply();
+last = `${reducedMotion()}|${highContrast()}`;

@@ -721,9 +721,35 @@ body {
 
 /* ── Small screens (judges on a phone) ────────────────────────── */
 
+/* Touch screens: every button and the tapes at least 44 px tall (Apple / WCAG target size). */
+@media (pointer: coarse) {
+  .btn,
+  .tape {
+    min-height: 44px;
+  }
+}
+
+/* A phone on its side: a short, wide screen, so the TV goes full height and the text a little smaller. */
+@media (max-height: 500px) and (orientation: landscape) {
+  body {
+    padding: 4px;
+    font-size: 18px;
+  }
+
+  .tv {
+    width: min(100%, calc((100dvh - 12px) * 4 / 3));
+    padding: 6px;
+    border-radius: 18px;
+  }
+}
+
 @media (max-width: 640px) {
   body {
     font-size: 19px;
+  }
+
+  .btn {
+    min-height: 44px;
   }
 
   .tv {

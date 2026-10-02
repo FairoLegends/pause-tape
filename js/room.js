@@ -377,8 +377,17 @@ function placeView(aspect) { // centre the picture on the window's line of sight
 placeView(4 / 3);
 scene.add(view);
 
-const loader = new THREE.TextureLoader();
-for (const [file, key] of [['window-day.jpg', 'day'], ['window-night.jpg', 'night']]) {
+// The pictures are the room's only downloads (about 0.3 MB of WebP; the JPG originals stay in the
+// repository with their content credentials). A LoadingManager reports progress to the app's loading
+// screen, like an async scene load with a progress bar.
+const load = { done: 0, total: 0, listeners: [] };
+const loadingManager = new THREE.LoadingManager();
+loadingManager.onStart = () => {};
+loadingManager.itemStart = ((start) => (url) => { load.total++; start(url); })(loadingManager.itemStart);
+loadingManager.itemEnd = ((end) => (url) => { load.done++; end(url); for (const fn of load.listeners) fn(); })(loadingManager.itemEnd);
+loadingManager.itemError = ((err) => (url) => { err(url); })(loadingManager.itemError);
+const loader = new THREE.TextureLoader(loadingManager);
+for (const [file, key] of [['window-day.webp', 'day'], ['window-night.webp', 'night']]) {
   loader.load(asset(`room/${file}`), (t) => {
     t.colorSpace = THREE.SRGBColorSpace;
     viewMat.uniforms[key].value = t;
@@ -1243,12 +1252,12 @@ function makePainting(file, w, h, place) {
 }
 // Back wall, right of the window (above the VCR and the lamp): the mountain, then the flowers.
 // Right of the window (the curtain rod ends near x 1.12): landscape above the lamp, flowers beside it.
-makePainting('painting-gunung.jpg', 0.56, 0.42, (g) => g.position.set(1.3, 1.72, BACK + 0.02)); // x 0.98..1.62
-makePainting('painting-bunga.jpg', 0.26, 0.35, (g) => g.position.set(1.83, 1.72, BACK + 0.02)); // x 1.67..1.99, clear of the clock (2.05)
+makePainting('painting-gunung.webp', 0.56, 0.42, (g) => g.position.set(1.3, 1.72, BACK + 0.02)); // x 0.98..1.62
+makePainting('painting-bunga.webp', 0.26, 0.35, (g) => g.position.set(1.83, 1.72, BACK + 0.02)); // x 1.67..1.99, clear of the clock (2.05)
 // Left side wall, beside the bookshelf: the rice terraces.
 // Back wall above the bookshelf (learner's choice: with the 45° camera a painting on the left wall
 // falls outside the frame). The shelf tops out at 1.9 m and the ceiling is at 2.6 m.
-makePainting('painting-sawah.jpg', 0.6, 0.45, (g) => g.position.set(-1.95, 2.2, BACK + 0.02));
+makePainting('painting-sawah.webp', 0.6, 0.45, (g) => g.position.set(-1.95, 2.2, BACK + 0.02));
 // ── Lights ────────────────────────────────────────────────────────────
 
 // One direction for everything that is "the sun": the light itself, the visible shafts and the
@@ -1792,9 +1801,12 @@ soundQuick.addEventListener('click', () => setSound(!soundOn()).then(syncButtons
 resumeOnFirstClick();
 howPanel.querySelector('[data-how-close]').addEventListener('click', () => { howPanel.hidden = true; });
 function placeSoundButton() { // just left of the controls' toggle, whatever its label's width
-  const r = panel.querySelector('[data-toggle]').getBoundingClientRect();
-  document.documentElement.style.setProperty('--controls-w', `${Math.round(innerWidth - r.left - 14)}px`);
+  // With the controls open the panel is wide, so the button sits left of the whole panel instead.
+  const r = (panel.classList.contains('is-hidden') ? panel.querySelector('[data-toggle]') : panel).getBoundingClientRect();
+  const w = Math.max(0, Math.min(innerWidth - 80, Math.round(innerWidth - r.left - 14)));
+  document.documentElement.style.setProperty('--controls-w', `${w}px`);
 }
+window.addEventListener('resize', () => requestAnimationFrame(placeSoundButton));
 function syncButtons() {
   requestAnimationFrame(placeSoundButton);
   const sb = panel.querySelector('[data-sound]');
@@ -1822,6 +1834,7 @@ panel.addEventListener('click', (e) => {
     tg.setAttribute('aria-expanded', String(open));
     tg.querySelector('[data-toggle-text]').textContent = open ? 'HIDE CONTROLS' : 'ROOM CONTROLS';
   }
+  requestAnimationFrame(placeSoundButton);
   if (e.target.closest('[data-how]')) howPanel.hidden = !howPanel.hidden;
   const sb = e.target.closest('[data-sound]');
   if (sb) setSound(!soundOn()).then(syncButtons);
@@ -2343,4 +2356,18 @@ export function setupCrtBend() {
   filter.querySelector('feDisplacementMap').setAttribute('scale', String(scale));
   document.documentElement.classList.add('crt-bend');
   return true;
+}
+
+// Resolves when every room picture has arrived (or failed: the room works without them), and reports
+// progress on the way: onProgress(loaded, total).
+export function roomReady(onProgress = () => {}) {
+  return new Promise((resolve) => {
+    const report = () => {
+      onProgress(load.done, load.total);
+      if (load.total && load.done >= load.total) resolve();
+    };
+    load.listeners.push(report);
+    report();
+    setTimeout(resolve, 8000); // never hold the app back for long
+  });
 }

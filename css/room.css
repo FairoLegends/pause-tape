@@ -444,3 +444,99 @@
 .high-contrast .photo-panel button {
   border-color: #ffffff;
 }
+
+/* ── Loading screen (while the room's code and pictures arrive) ── */
+
+.room-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  background: var(--vcr-blue);
+  color: #ffffff;
+  font-family: var(--font-osd);
+  transition: opacity 0.5s;
+}
+
+/* Fading out: it no longer takes clicks, so the room underneath works at once. */
+.room-loading.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.room-loading__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: 0.08em;
+}
+
+.room-loading__bar {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 3px;
+  width: min(360px, 70vw);
+  height: 24px;
+  padding: 3px;
+  border: 2px solid #ffffff;
+}
+
+.room-loading__cell {
+  background: #ffffff;
+  opacity: 0;
+}
+
+.room-loading__cell.is-on {
+  opacity: 1;
+}
+
+.room-loading__meta {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+}
+
+.no-webgl {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  z-index: 20;
+  margin: 0;
+  padding: 4px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(217, 222, 232, 0.3);
+  border-radius: 6px;
+  background: rgba(5, 7, 12, 0.9);
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* ── Touch screens and small windows: buttons at least 44 px ── */
+
+@media (pointer: coarse), (max-width: 900px) {
+  .room-panel button,
+  .photo-panel button,
+  .how-panel__close,
+  .hint.is-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* A short landscape window (a phone on its side): smaller panels so the TV stays in view. */
+@media (max-height: 520px) {
+  .room-panel {
+    max-height: calc(100dvh - 28px);
+    overflow-y: auto;
+  }
+
+  .hint {
+    font-size: 16px;
+  }
+}

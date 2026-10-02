@@ -160,6 +160,19 @@
     </div>
   </main>
 
+  <!-- Loading screen for the room (js/app.js fills it in), and the note shown without WebGL. -->
+  <div class="room-loading" data-room-loading hidden role="status" aria-live="polite">
+    <p class="room-loading__title"><span class="ico ico--play" aria-hidden="true"></span>LOADING THE ROOM</p>
+    <div class="room-loading__bar" aria-hidden="true">
+      <span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span>
+      <span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span>
+      <span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span>
+      <span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span><span class="room-loading__cell"></span>
+    </div>
+    <p class="room-loading__meta"><span data-room-loading-pct>0%</span> · <span data-room-loading-eta>ESTIMATING…</span></p>
+  </div>
+  <p class="no-webgl" data-no-webgl hidden role="status">3D ROOM OFF: THIS BROWSER HAS NO WEBGL. THE TAPES WORK THE SAME.</p>
+
   <!-- The room around the TV (prd.md > The room around the TV). js/room.js moves the screen above
        onto the 3D TV's glass and shows these controls; without WebGL they stay hidden. -->
   <div class="room-stage" data-room-stage hidden></div>
