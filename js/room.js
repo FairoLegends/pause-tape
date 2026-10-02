@@ -15,6 +15,7 @@ import { RenderPass } from '../assets/vendor/addons/postprocessing/RenderPass.js
 import { ShaderPass } from '../assets/vendor/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from '../assets/vendor/addons/postprocessing/OutputPass.js';
 import { reducedMotion, highContrast, soundOn, setPref, onPrefsChange } from './prefs.js';
+import { setSound, vcrClick, tapeIn, staticBurst, resumeOnFirstClick, soundState } from './sound.js';
 
 const stage = document.querySelector('[data-room-stage]');
 const roomUi = document.querySelector('[data-room-ui]');
@@ -1574,6 +1575,7 @@ let cutT = Infinity;
 let cutDir = 'in';
 function startCut(toCovered) {
   if (covered === toCovered) return;
+  staticBurst(0.32); // the picture cuts with a burst of static
   covered = toCovered;
   cutDir = toCovered ? 'in' : 'out';
   cutT = reduced.matches ? Infinity : 0; // reduced motion: a plain cut
@@ -1715,11 +1717,12 @@ function setMode(m) {
     if (was !== 'standby') hooks.onLeave?.();
   }
   if (m === 'app' && was !== 'play') goTo(POSES.screen);
-  if (m === 'insert') { goTo(POSES.insert, 1.0); cassette.visible = true; cassette.position.z = 0.42; }
+  if (m === 'insert') { goTo(POSES.insert, 1.0); cassette.visible = true; cassette.position.z = 0.42; tapeIn(); }
   if (m === 'play') goTo(POSES.screen, 1.4, easeIn);
 }
 function toggleTv() {
   pressT = 0;
+  vcrClick();
   setMode(tvMode === 'standby' ? 'app' : 'standby');
 }
 makeClickable(vcr, 'vcr', toggleTv);
@@ -1783,8 +1786,23 @@ window.addEventListener('keydown', (e) => {
 
 const panel = document.querySelector('[data-panel]');
 const howPanel = document.querySelector('[data-how-panel]');
+// A clear mute button always on screen, next to the controls (the SOUND switch inside them is the same).
+const soundQuick = document.querySelector('[data-sound-quick]');
+soundQuick.addEventListener('click', () => setSound(!soundOn()).then(syncButtons));
+resumeOnFirstClick();
 howPanel.querySelector('[data-how-close]').addEventListener('click', () => { howPanel.hidden = true; });
+function placeSoundButton() { // just left of the controls' toggle, whatever its label's width
+  const r = panel.querySelector('[data-toggle]').getBoundingClientRect();
+  document.documentElement.style.setProperty('--controls-w', `${Math.round(innerWidth - r.left - 14)}px`);
+}
 function syncButtons() {
+  requestAnimationFrame(placeSoundButton);
+  const sb = panel.querySelector('[data-sound]');
+  sb.setAttribute('aria-pressed', String(soundOn()));
+  sb.textContent = soundOn() ? 'SOUND ON' : 'SOUND OFF';
+  soundQuick.setAttribute('aria-pressed', String(soundOn()));
+  soundQuick.setAttribute('aria-label', soundOn() ? 'Mute sound' : 'Turn sound on');
+  soundQuick.classList.toggle('is-on', soundOn());
   for (const b of panel.querySelectorAll('[data-pref]')) b.setAttribute('aria-pressed', String(b.dataset.pref === 'motion' ? reducedMotion() : highContrast()));
   for (const b of panel.querySelectorAll('[data-time]')) b.setAttribute('aria-pressed', String(b.dataset.time === mode));
 }
@@ -1805,6 +1823,8 @@ panel.addEventListener('click', (e) => {
     tg.querySelector('[data-toggle-text]').textContent = open ? 'HIDE CONTROLS' : 'ROOM CONTROLS';
   }
   if (e.target.closest('[data-how]')) howPanel.hidden = !howPanel.hidden;
+  const sb = e.target.closest('[data-sound]');
+  if (sb) setSound(!soundOn()).then(syncButtons);
   const pb = e.target.closest('[data-pref]');
   if (pb) {
     const name = pb.dataset.pref;
@@ -2256,6 +2276,7 @@ window.__room = {
   setDust: (on) => { dust.material.visible = on; },
   dust: () => ({ n: DUST_N, visible: dust.visible, opacity: dustMat.uniforms.uOpacity.value }),
   setSunDisc: (on) => { sunDisc.visible = on; },
+  sound: soundState,
   post: () => ({ amount: gradePass.uniforms.uAmount.value, passes: composer.passes.length }),
   setPost: (on) => { gradePass.enabled = on; },
   hover: () => ({ name: hover, amt: { ...hoverAmt }, label: hoverLabel.textContent, labelOpacity: Number(hoverLabel.style.opacity || 0) }),

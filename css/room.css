@@ -220,6 +220,61 @@
   font-size: 18px;
 }
 
+/* Mute button, always visible, left of ROOM CONTROLS. A speaker drawn in CSS; waves when on, a slash when off. */
+.sound-quick {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-right: calc(var(--controls-w, 190px) + 8px);
+  transition: margin-right 0.2s;
+  border: 1px solid rgba(217, 222, 232, 0.3);
+  border-radius: 8px;
+  background: rgba(5, 7, 12, 0.85);
+  color: #e8ecf3;
+  cursor: pointer;
+}
+
+.sound-quick__speaker {
+  position: absolute;
+  left: 12px;
+  width: 9px;
+  height: 10px;
+  background: currentColor;
+  clip-path: polygon(0 30%, 40% 30%, 100% 0, 100% 100%, 40% 70%, 0 70%);
+}
+
+.sound-quick__waves {
+  position: absolute;
+  left: 23px;
+  width: 10px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-color: transparent currentColor transparent transparent;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.sound-quick.is-on .sound-quick__waves {
+  opacity: 1;
+}
+
+.sound-quick:not(.is-on)::after {
+  content: '';
+  position: absolute;
+  width: 26px;
+  border-top: 2px solid var(--rec);
+  transform: rotate(-40deg);
+}
+
+.zoomed .sound-quick {
+  opacity: 0.55;
+}
+
 /* HOW IT WORKS: the AI models and prompts behind the pictures. */
 /* Top left, so it never covers the room controls it was opened from (top right). */
 .how-panel {
