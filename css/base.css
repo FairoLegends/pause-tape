@@ -160,11 +160,16 @@ body {
   }
 }
 
-/* The browser's "reduce motion" setting stops the blink; the dot stays lit. */
+/* The browser's "reduce motion" setting, or REDUCE MOTION in the room controls (html.reduce-motion,
+   set by js/prefs.js), stops the blink; the dot stays lit. */
 @media (prefers-reduced-motion: reduce) {
   .osd__rec .ico--rec {
     animation: none;
   }
+}
+
+.reduce-motion .osd__rec .ico--rec {
+  animation: none;
 }
 
 .ico--stop {
@@ -733,4 +738,35 @@ body {
   .record__group--label {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── High contrast (HIGH CONTRAST in the room controls, or the system setting) ── */
+
+.high-contrast {
+  --ink: #ffffff;
+  --ink-dim: rgba(255, 255, 255, 0.88);
+  --line: rgba(255, 255, 255, 0.5);
+  --locked: #b8c0cc;
+  --vhs: 0.1 !important; /* calmer picture: fewer scanlines and less grain over the text */
+}
+
+.high-contrast .tv__screen {
+  background: #000000;
+}
+
+.high-contrast .osd,
+.high-contrast .answer__text,
+.high-contrast .first__text {
+  text-shadow: none;
+}
+
+.high-contrast input,
+.high-contrast textarea {
+  border-color: #ffffff !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.high-contrast .btn {
+  border-width: 2px;
 }

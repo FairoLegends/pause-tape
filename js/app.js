@@ -10,6 +10,7 @@ import { initPlayback, PACE } from './playback.js';
 import { startCrt } from './crt.js';
 import { switchGlitch } from './motion.js';
 import { downloadIcs } from './ics.js';
+import { reducedMotion, highContrast } from './prefs.js';
 
 // --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
 const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, blue: 1, playback: 1, backonit: 0.5 };
@@ -123,10 +124,10 @@ document.querySelector('[data-action="early-cancel"]').addEventListener('click',
 screens.backonit.addEventListener('click', () => show('shelf'));
 
 // The shader layer starts once; if WebGL isn't available the CSS layer keeps working.
-const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
 startCrt(document.querySelector('.tv__screen'), {
-  getVhs: () => VHS[current] ?? 0.5,
-  reducedMotion: () => reducedQuery.matches,
+  getVhs: () => (highContrast() ? 0.1 : VHS[current] ?? 0.5), // high contrast calms the picture
+  reducedMotion,
 });
 
 show('shelf');

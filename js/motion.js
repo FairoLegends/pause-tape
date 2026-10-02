@@ -5,11 +5,13 @@
 // Motion personality: tape mechanics — short, decisive, no bounce (motion-design: "Corporate"
 // timing with a stepped, mechanical ease for the scramble).
 
+import { reducedMotion } from './prefs.js';
+
 const gsap = globalThis.gsap;
 const Scramble = globalThis.ScrambleTextPlugin;
 if (gsap && Scramble) gsap.registerPlugin(Scramble);
 
-const reduced = () => Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+const reduced = () => reducedMotion(); // the player's choice in the room controls, or the system setting
 const enabled = () => Boolean(gsap) && !reduced();
 
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&*+=/<>';

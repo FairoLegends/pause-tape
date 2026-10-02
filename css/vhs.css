@@ -211,3 +211,16 @@
     animation: none;
   }
 }
+
+/* The same, chosen in the room controls (html.reduce-motion, set by js/prefs.js). */
+.reduce-motion .vhs,
+.reduce-motion .glitch,
+.reduce-motion .freeze,
+.reduce-motion .lock-on {
+  animation: none;
+}
+
+/* High contrast: the scanlines and the shader layer step back so the text stands out. */
+.high-contrast .crt {
+  opacity: 0.35;
+}

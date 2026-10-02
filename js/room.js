@@ -10,6 +10,7 @@ import * as THREE from '../assets/vendor/three.module.min.js';
 import { RoomEnvironment } from '../assets/vendor/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from '../assets/vendor/addons/geometries/RoundedBoxGeometry.js';
 import { CSS3DRenderer, CSS3DObject } from '../assets/vendor/addons/renderers/CSS3DRenderer.js';
+import { reducedMotion, highContrast, soundOn, setPref, onPrefsChange } from './prefs.js';
 
 const stage = document.querySelector('[data-room-stage]');
 const roomUi = document.querySelector('[data-room-ui]');
@@ -19,7 +20,7 @@ const tvHome = appScreen.parentElement; // where it lives in the flat layout (ma
 // Asset paths from this file, so they work at the site root and on GitHub Pages' /<repo>/ path.
 const asset = (path) => new URL(`../assets/${path}`, import.meta.url).href;
 const params = new URLSearchParams(location.search);
-const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+const reduced = { get matches() { return reducedMotion(); } }; // the player's choice, or the system setting
 document.fonts.load('44px VT323'); // canvas text doesn't make the browser load a font by itself
 
 // ── Renderer, scene, camera ───────────────────────────────────────────
@@ -1529,6 +1530,25 @@ const aim = new THREE.Vector2(0, 0); // the eased pointer the camera follows
 let hasPointer = false;
 let pressT = 1;
 let hover = null;
+const HOVERABLE = ['vcr', 'screen', 'window', 'lamp', 'frame'];
+const hoverAmt = Object.fromEntries(HOVERABLE.map((n) => [n, 0])); // 0..1, eased
+const tvGlass = { emissive: 0 };
+const HOVER_TEXT = { vcr: 'VCR · OPEN THE TAPES', screen: 'TV · OPEN THE TAPES', window: 'CURTAIN', lamp: 'LAMP', frame: 'PHOTO' };
+const hoverLabel = document.querySelector('[data-hover-label]');
+let labelFor = null;
+const _lbl = new THREE.Vector3();
+function updateHoverLabel() {
+  // the label follows the last hovered thing while it fades out
+  let best = null;
+  for (const n of HOVERABLE) if (hoverAmt[n] > 0.02 && (!best || hoverAmt[n] > hoverAmt[best])) best = n;
+  if (!best) { hoverLabel.style.opacity = '0'; labelFor = null; return; }
+  if (labelFor !== best) { hoverLabel.textContent = HOVER_TEXT[best]; labelFor = best; }
+  const root = { vcr, screen, window: windowGroup, lamp, frame }[best];
+  const b = solidBox(root);
+  _lbl.set((b.min.x + b.max.x) / 2, b.max.y + 0.06, (b.min.z + b.max.z) / 2).project(camera);
+  hoverLabel.style.transform = `translate(${((_lbl.x + 1) / 2) * innerWidth}px, ${((1 - _lbl.y) / 2) * innerHeight}px) translate(-50%, -100%)`;
+  hoverLabel.style.opacity = String(Math.min(1, hoverAmt[best] * 1.2));
+}
 const HINT_STANDBY = 'VCR · CURTAIN · LAMP · PHOTO';
 
 // TV modes: standby (the room; the TV shows PRESS THE VCR) -> app (VCR clicked: the camera goes into
@@ -1645,13 +1665,17 @@ stage.addEventListener('click', (e) => {
 });
 hint.addEventListener('click', () => { if (tvMode !== 'standby') setMode('standby'); });
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !howPanel.hidden) { howPanel.hidden = true; return; }
   if (e.key === 'Escape' && tvMode !== 'standby' && photoPanel.hidden) setMode('standby');
 });
 
 // ── Panel: time switch and hide ───────────────────────────────────────
 
 const panel = document.querySelector('[data-panel]');
+const howPanel = document.querySelector('[data-how-panel]');
+howPanel.querySelector('[data-how-close]').addEventListener('click', () => { howPanel.hidden = true; });
 function syncButtons() {
+  for (const b of panel.querySelectorAll('[data-pref]')) b.setAttribute('aria-pressed', String(b.dataset.pref === 'motion' ? reducedMotion() : highContrast()));
   for (const b of panel.querySelectorAll('[data-time]')) b.setAttribute('aria-pressed', String(b.dataset.time === mode));
 }
 panel.addEventListener('click', (e) => {
@@ -1664,12 +1688,21 @@ panel.addEventListener('click', (e) => {
     setTarget(currentName());
     syncButtons();
   }
-  if (e.target.closest('[data-toggle]')) {
-    panel.classList.toggle('is-hidden');
-    e.target.textContent = panel.classList.contains('is-hidden') ? 'SHOW' : 'HIDE';
+  const tg = e.target.closest('[data-toggle]');
+  if (tg) {
+    const open = panel.classList.toggle('is-hidden') === false;
+    tg.setAttribute('aria-expanded', String(open));
+    tg.querySelector('[data-toggle-text]').textContent = open ? 'HIDE CONTROLS' : 'ROOM CONTROLS';
+  }
+  if (e.target.closest('[data-how]')) howPanel.hidden = !howPanel.hidden;
+  const pb = e.target.closest('[data-pref]');
+  if (pb) {
+    const name = pb.dataset.pref;
+    setPref(name, !(name === 'motion' ? reducedMotion() : highContrast()));
   }
 });
 syncButtons();
+onPrefsChange(syncButtons);
 
 // ── Resize and the loop (Update) ──────────────────────────────────────
 
@@ -1764,9 +1797,8 @@ renderer.setAnimationLoop((now) => {
   cloth.lagVel += ((lagGoal - cloth.lag) * 70 - cloth.lagVel * 7) * dt;
   cloth.lag = reduced.matches ? 0 : THREE.MathUtils.clamp(cloth.lag + cloth.lagVel * dt, -0.12, 0.12);
   const stillCloth = reduced.matches;
-  const hoverAmt = hover === 'window' ? 1 : 0;
-  shapeCurtain(curtainL, pw, t, stillCloth, hoverAmt);
-  shapeCurtain(curtainR, pw, t, stillCloth, hoverAmt);
+  shapeCurtain(curtainL, pw, t, stillCloth, hoverAmt.window);
+  shapeCurtain(curtainR, pw, t, stillCloth, hoverAmt.window);
 
   // Light glides toward the current period over a few seconds, like the sky changing.
   if (T.name !== currentName()) setTarget(currentName());
@@ -1807,22 +1839,28 @@ renderer.setAnimationLoop((now) => {
   if (hasPointer && frameNo % 2 === 0) {
     hover = clickableAt(pointer.x, pointer.y)?.userData.name ?? null;
   }
-  if (!hasPointer) hover = null;
+  if (!hasPointer || tvMode !== 'standby') hover = null;
   stage.style.cursor = cord.held ? 'grabbing' : hover ? 'pointer' : '';
+  // Each clickable thing's highlight fades in and out (about 0.2 s), and a small label with its name
+  // fades in above it, so the player sees what can be clicked.
+  for (const n of HOVERABLE) hoverAmt[n] += ((hover === n ? 1 : 0) - hoverAmt[n]) * k(reduced.matches ? 60 : 12, dt);
+  updateHoverLabel();
   // The glass reflection reads as glass from the room; in the TV it would wash over the app.
-  tvSheen.material.opacity = 0.55 * (1 - 0.85 * z);
+  tvSheen.material.opacity = 0.55 * (1 - 0.85 * z) + 0.25 * hoverAmt.screen;
 
-  pic.material.emissive.set(hover === 'frame' ? 0x1c1c1c : 0x000000);
+  pic.material.emissive.setScalar(0.16 * hoverAmt.frame);
 
   // Curtain fabric: light shines through it when it is closed (daylight behind it); hover brightens it.
   curtainMat.emissive.copy(C.glow).multiplyScalar((1 - co) * Math.min(1.2, A.sunI / 3) * 0.16); // a soft glow through the cloth; more would flatten the folds
-  if (hover === 'window') curtainMat.emissive.add(hoverTint);
+  curtainMat.emissive.r += hoverTint.r * hoverAmt.window * 1.6;
+  curtainMat.emissive.g += hoverTint.g * hoverAmt.window * 1.6;
+  curtainMat.emissive.b += hoverTint.b * hoverAmt.window * 1.6;
 
   ceiling.material.emissiveIntensity = 0.45 * (1 - 0.85 * A.night); // cream by day, dark at night
 
   // Lamp: light, shade glow and halo follow how "on" it is.
   lampLight.intensity = 1.7 * A.lamp;
-  shadeMat.emissiveIntensity = 0.1 + 1.0 * A.lamp + (hover === 'lamp' ? 0.25 : 0);
+  shadeMat.emissiveIntensity = 0.1 + 1.0 * A.lamp + 0.35 * hoverAmt.lamp;
   bulb.material.color.setRGB(1, 0.85, 0.6).multiplyScalar(0.35 + 0.65 * A.lamp);
   lampGlowSprite.material.opacity = 0.75 * A.lamp;
 
@@ -1830,12 +1868,14 @@ renderer.setAnimationLoop((now) => {
   const due = status.ready > 0;
   const pulse = due && !reduced.matches ? 0.75 + 0.25 * Math.sin(t * 2.4) : 1;
   vcrLedMat.color.set(due ? 0x62ff8f : 0x3a3c42).multiplyScalar(pulse);
-  vcrGlow.intensity = (due ? 0.06 : 0) + (hover === 'vcr' ? 0.06 : 0);
-  vcrShell.material.emissive.set(hover === 'vcr' ? 0x0d2216 : 0x000000);
+  vcrGlow.intensity = (due ? 0.06 : 0) + 0.1 * hoverAmt.vcr;
+  vcrShell.material.emissive.setRGB(0.05, 0.13, 0.08).multiplyScalar(hoverAmt.vcr);
+  tvGlass.emissive = 0.18 * hoverAmt.screen; // the standby picture brightens a little
   pressT = Math.min(1, pressT + dt * 6);
   vcr.position.y = VCR_Y - Math.sin(pressT * Math.PI) * 0.006;
 
   drawScreen(t, dt);
+  standbyMat.color.setScalar(1 + tvGlass.emissive);
   drawVcrDisplay(t);
   // Sun shadow, baked: the sun and the room don't move, so the shadow map is drawn once and again only
   // while the curtain slides (it is the one big thing that casts a moving shadow); never while the
@@ -2089,6 +2129,7 @@ window.__room = {
   },
   setShafts: (on) => { for (const d of shafts) d.mesh.visible = on; },
   setSunDisc: (on) => { sunDisc.visible = on; },
+  hover: () => ({ name: hover, amt: { ...hoverAmt }, label: hoverLabel.textContent, labelOpacity: Number(hoverLabel.style.opacity || 0) }),
   setSunShadow: (on) => { sun.castShadow = on; shadowsDirty = true; },
   setContact: (on) => { for (const m of contact) m.visible = on; },
   // Where room corners land in the sun shadow's box (NDC); outside -1..1 means no shadow there.

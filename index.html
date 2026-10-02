@@ -164,9 +164,11 @@
        onto the 3D TV's glass and shows these controls; without WebGL they stay hidden. -->
   <div class="room-stage" data-room-stage hidden></div>
   <div class="room-ui" data-room-ui hidden>
-    <aside class="room-panel is-hidden" data-panel aria-label="Room settings">
-      <button class="toggle" type="button" data-toggle>SHOW</button>
-      <h2>ROOM</h2>
+    <aside class="room-panel is-hidden" data-panel aria-label="Room controls">
+      <button class="toggle" type="button" data-toggle aria-expanded="false">
+        <span class="toggle__icon" aria-hidden="true"></span><span data-toggle-text>ROOM CONTROLS</span>
+      </button>
+      <h2>TIME OF DAY</h2>
       <div class="times" role="group" aria-label="Time of day">
         <button type="button" data-time="auto">AUTO</button>
         <button type="button" data-time="morning">MORNING</button>
@@ -174,8 +176,46 @@
         <button type="button" data-time="afternoon">AFTERNOON</button>
         <button type="button" data-time="night">NIGHT</button>
       </div>
-      <div class="times"><button type="button" data-photo-adjust hidden>ADJUST PHOTO</button></div>
+      <h2>SOUND</h2>
+      <div class="times">
+        <button type="button" data-sound aria-pressed="false">SOUND OFF</button>
+      </div>
+      <h2>ACCESSIBILITY</h2>
+      <div class="times">
+        <button type="button" data-pref="motion" aria-pressed="false">REDUCE MOTION</button>
+        <button type="button" data-pref="contrast" aria-pressed="false">HIGH CONTRAST</button>
+      </div>
+      <div class="times">
+        <button type="button" data-photo-adjust hidden>ADJUST PHOTO</button>
+        <button type="button" data-how>HOW IT WORKS</button>
+      </div>
     </aside>
+    <section class="how-panel" data-how-panel hidden aria-labelledby="how-title">
+      <button class="how-panel__close" type="button" data-how-close aria-label="Close">×</button>
+      <h2 id="how-title">HOW IT WORKS</h2>
+      <p>The room is built in code with three.js: the furniture, the light, the shadows and the sounds. Only the flat pictures are AI-generated, by <b>Seedream 5.0 pro</b> (<code>dola-seedream-5-0-pro-260628</code>, BytePlus), reached through an OpenAI-compatible API gateway, with the visible AI watermark switched off. No people, logos or text were asked for.</p>
+      <details>
+        <summary>Window view (day)</summary>
+        <p>Stylized semi-cartoon illustration for a cozy indie video game: the view from a ground-floor window straight across a quiet neighborhood street in a 1990s Indonesian housing complex, side-on across the road: a cream house with a red clay-tile roof and a garden wall with an iron gate, a big round mango tree, a peach house with a carport, a mint-green house, two coconut palms and a wooden utility pole. Chunky simplified shapes, soft cel shading, warm pastel colors, like a hand-painted animated-film background. Daytime: bright blue sky with a few soft white clouds, warm sunlight. No people, no vehicles, no text, no logos, no watermark.</p>
+      </details>
+      <details>
+        <summary>Window view (night)</summary>
+        <p>Not generated: a small script recolours the day picture to moonlight, draws a night sky with stars and lights the house windows and a street lamp, so every house and tree stays in place. The moon is drawn by the room.</p>
+      </details>
+      <details>
+        <summary>Painting: rice terraces</summary>
+        <p>A painting for a cozy semi-cartoon living room: stylized, chunky simplified shapes, soft painterly brush texture, gentle cel shading, warm muted pastel colors; no frame, signature, text, people or watermark. Subject: Indonesian rice terraces (sawah) in the morning, curved green terraces stepping down a hill, a small wooden hut, a few coconut palms, soft mist, a pale blue sky.</p>
+      </details>
+      <details>
+        <summary>Painting: volcano</summary>
+        <p>Same style. Subject: a calm volcano mountain in Java seen across green fields and a winding river, soft clouds around the peak, warm late-afternoon light.</p>
+      </details>
+      <details>
+        <summary>Painting: flowers</summary>
+        <p>Same style. Subject: a still life of tropical flowers in a simple clay vase on a table: frangipani, hibiscus and jasmine, with a plain warm background. Portrait.</p>
+      </details>
+      <p class="how-panel__note">Credits and licence terms: THIRD_PARTY_NOTICES.md in the repository.</p>
+    </section>
     <section class="photo-panel" data-photo-panel hidden aria-label="Photo in the frame">
       <h2>PHOTO</h2>
       <canvas width="306" height="400" data-photo-preview aria-label="Drag to move the photo, scroll to zoom"></canvas>
@@ -190,6 +230,7 @@
     </section>
     <input type="file" accept="image/*" hidden data-photo-input aria-label="Choose a photo for the frame">
     <button class="hint" type="button" data-hint>VCR · CURTAIN · LAMP · PHOTO</button>
+    <span class="hover-label" data-hover-label aria-hidden="true"></span>
   </div>
 
   <!-- The CRT curve for the app screen in the room (js/room.js fills in the map). -->
