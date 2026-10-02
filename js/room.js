@@ -32,6 +32,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.autoUpdate = false; // redrawn only when something that casts a shadow moves (see the loop)
 renderer.domElement.className = 'room-gl';
 renderer.domElement.setAttribute('aria-hidden', 'true');
 // The HTML layer sits under the WebGL canvas; the canvas takes no clicks, so the app's buttons
@@ -1205,11 +1206,15 @@ const sun = new THREE.DirectionalLight(0xffffff, 3);
 sun.position.copy(SUN_AIM).addScaledVector(SUN_DIR, -9); // behind the wall; the light enters through the window
 sun.target.position.copy(SUN_AIM);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -3.5, right: 3.5, top: 3.5, bottom: -3.5, near: 0.5, far: 20 });
+// The shadow box hugs the room (5 x 3.6 m seen along the sun), so a 1024 map is as sharp as the old
+// 2048 one over 7 m, at a quarter of the memory and fill. radius softens the edge like a real window.
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -3.1, right: 3.1, top: 2.6, bottom: -2.6, near: 5, far: 14 });
 sun.shadow.camera.updateProjectionMatrix();
-sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.02;
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.025;
+sun.shadow.radius = 3;
+sun.shadow.blurSamples = 8;
 scene.add(sun, sun.target);
 
 // The sun you can see in the window (upper left), and soft shafts of light leaving the window
@@ -1624,10 +1629,13 @@ const offset = V(0, 0, 0);
 const origin = V(0, 0, 0);
 const hoverTint = new THREE.Color(0.07, 0.055, 0.03);
 let frameNo = 0;
+let shadowsDirty = true; // draw the shadow map once at the start
 
 renderer.setAnimationLoop((now) => {
   timer.update(now);
-  const dt = Math.min(timer.getDelta(), 0.1);
+  // Never negative: the first frame's time can come before the timer's start, which would drag the
+  // camera back toward its empty starting pose for a moment.
+  const dt = THREE.MathUtils.clamp(timer.getDelta(), 0, 0.1);
   const t = timer.getElapsed();
   frameNo++;
 
@@ -1753,6 +1761,14 @@ renderer.setAnimationLoop((now) => {
 
   drawScreen(t);
   drawVcrDisplay(t);
+  // Sun shadow: redrawn every third frame while the cloth breathes and every frame while something
+  // moves fast (the curtain sliding, the cord swinging); never while the camera is inside the TV,
+  // where the room is hidden behind the app.
+  const moving = Math.abs(cloth.vel) > 0.02 || cord.held || Math.abs(cord.vel) > 0.05 || Math.abs(cord.swingVel) > 0.05;
+  if (shadowsDirty || (close < 0.98 && (moving || frameNo % 3 === 0))) {
+    renderer.shadowMap.needsUpdate = true;
+    shadowsDirty = false;
+  }
   renderer.render(scene, camera);
   css.render(cssScene, camera);
 });
@@ -1811,9 +1827,70 @@ function ndcSpan(name) { // horizontal and vertical extent on screen (NDC) of an
   }
   return { x0, x1, y0, y1 };
 }
+// ── Contact shadows (baked, nearly free) ─────────────────────────────
+// The sun's shadow only exists where the sun reaches, so furniture elsewhere looked as if it floated.
+// Like a baked AO decal in Unity: a soft dark patch on the floor under each piece, and a dark band where
+// the walls meet the floor. One small texture, a handful of see-through quads, no extra render pass.
+const blobTex = canvasTexture(128, 128, (g, w, h) => {
+  const grd = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  grd.addColorStop(0, 'rgba(0,0,0,1)');
+  grd.addColorStop(0.45, 'rgba(0,0,0,0.75)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+});
+const aoBandTex = canvasTexture(8, 64, (g, w, h) => {
+  const grd = g.createLinearGradient(0, h, 0, 0); // dark at the floor line, fading upward / outward
+  grd.addColorStop(0, 'rgba(0,0,0,1)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+});
+const contact = [];
+const contactMat = (map, opacity) => new THREE.MeshBasicMaterial({ map, color: 0x000000, transparent: true, opacity, depthWrite: false, toneMapped: false });
+// A blob a little larger than the footprint, a few millimetres above the rug so it shows on both.
+function blobUnder(root, opacity, grow = 0.18) {
+  const b = solidBox(root);
+  const m = noPick(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), contactMat(blobTex.texture, opacity)));
+  m.rotation.x = -Math.PI / 2;
+  m.scale.set(b.max.x - b.min.x + grow, b.max.z - b.min.z + grow, 1);
+  m.position.set((b.min.x + b.max.x) / 2, 0.013, (b.min.z + b.max.z) / 2);
+  m.renderOrder = 1;
+  scene.add(m);
+  contact.push(m);
+}
+// Solid pieces sit flat on the floor (dark, tight); legged ones only shade the floor softly.
+blobUnder(cab, 0.62, 0.34);
+blobUnder(bookshelf, 0.62, 0.34);
+blobUnder(clockGroup, 0.58, 0.3);
+blobUnder(sofa, 0.6, 0.36);
+blobUnder(longSofa, 0.6, 0.36);
+blobUnder(armchair, 0.6, 0.36);
+blobUnder(table, 0.42, 0.34);
+blobUnder(sideTable, 0.42, 0.3);
+// Where the walls meet the floor: a band on the floor along each wall and one up the wall's foot.
+function aoBand(w, h, x, y, z, rotX, rotY, opacity) {
+  const m = noPick(new THREE.Mesh(new THREE.PlaneGeometry(w, h), contactMat(aoBandTex.texture, opacity)));
+  m.rotation.order = 'YXZ';
+  m.rotation.set(rotX, rotY, 0);
+  m.position.set(x, y, z);
+  scene.add(m);
+  contact.push(m);
+}
+const AO_FLOOR = 0.3; // how far the darkening reaches over the floor
+const AO_WALL = 0.22; // and up the wall
+aoBand(ROOM.w, AO_FLOOR, 0, 0.003, BACK + AO_FLOOR / 2, -Math.PI / 2, Math.PI, 0.45); // back wall, on the floor
+aoBand(ROOM.w, AO_WALL, 0, AO_WALL / 2, BACK + 0.022, 0, 0, 0.32); // back wall, up its foot (in front of the baseboard)
+for (const sx of [-1, 1]) {
+  aoBand(FLOOR_LEN, AO_FLOOR, sx * (ROOM.w / 2 - AO_FLOOR / 2), 0.003, BACK + FLOOR_LEN / 2, -Math.PI / 2, sx * Math.PI / 2, 0.42);
+  aoBand(FLOOR_LEN, AO_WALL, sx * (ROOM.w / 2 - 0.004), AO_WALL / 2, BACK + FLOOR_LEN / 2, 0, -sx * Math.PI / 2, 0.3);
+}
+
 // For the automated checks (the room is a module, so they need a handle on it).
 window.__room = {
   camera,
+  renderer,
+  sunShadowSize: () => sun.shadow.mapSize.x,
   status: () => status,
   getMode: () => tvMode,
   live: () => !appScreen.inert,

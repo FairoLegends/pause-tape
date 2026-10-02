@@ -57,7 +57,7 @@ const playback = initPlayback(screens, {
 // enter()/leave() hooks, like OnEnable/OnDisable.
 const hooks = { record };
 
-function show(name) {
+function show(name, { force = false } = {}) {
   // In the room: the blue screen is up and the replay begins, so the camera eases into the TV.
   if (room && name === 'playback') room.loadingDone();
   hooks[current]?.leave();
@@ -71,7 +71,7 @@ function show(name) {
   current = name;
   if (name === 'shelf') drawShelf();
   hooks[name]?.enter();
-  switchGlitch(from, screens[name]);
+  switchGlitch(from, screens[name], { force });
 }
 
 // Tape states are worked out from today's date on every draw, so a locked tape
@@ -142,7 +142,8 @@ async function startRoomIfPossible() {
     // In the room, the blue loading screen runs about 3 s and the camera eases in when it ends
     // (learner request for the VHS mode); the flat TV keeps its shorter 1.2 s.
     PACE.blueMs = 3000;
-    room = mod.startRoom({ onLeave: () => show('shelf') });
+    // BACK TO THE ROOM: the same freeze + glitch as any screen change, even from the shelf itself.
+    room = mod.startRoom({ onLeave: () => show('shelf', { force: true }) });
     mod.setupCrtBend();
     document.documentElement.classList.add('has-room');
   } catch (err) {

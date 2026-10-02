@@ -63,8 +63,8 @@ export function loadBar(barEl, seconds) {
 // The frozen picture is a copy of the old screen that takes no clicks, so the new screen's buttons
 // work right away. Styled in css/vhs.css. With reduced motion the screen just cuts.
 const FREEZE_MS = 340;
-export function switchGlitch(fromSection, toSection) {
-  if (reduced() || !fromSection || fromSection === toSection) return null;
+export function switchGlitch(fromSection, toSection, { force = false } = {}) {
+  if (reduced() || !fromSection || (fromSection === toSection && !force)) return null;
   const host = fromSection.parentElement;
   host.querySelector(':scope > .freeze')?.remove();
   const still = fromSection.cloneNode(true);
