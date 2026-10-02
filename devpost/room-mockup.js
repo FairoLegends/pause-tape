@@ -34,23 +34,36 @@ const _ndc = new THREE.Vector2();
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // Layout in metres: x to the right, y up, z toward the viewer. The back wall is at WALL_Z.
-// Left to right along the back wall: bookshelf, window, TV cabinet, grandfather clock; paintings on the empty
-// walls. In the room: a sofa (left) and an armchair (right) facing each other across a table with books, and a
-// long low sofa in front of the table facing the TV.
-const WALL_Z = -2.0;
-const WIN = { x: -0.85, y: 1.9, w: 1.0, h: 0.95 }; // the sill plate (y 1.38..1.43) clears the TV top (~1.29)
+// Back wall, left to right: bookshelf, window over the TV cabinet, lamp on a small side table, grandfather
+// clock; paintings on the empty walls. Seating around a coffee table on a rug: a small sofa on the left facing
+// right, an armchair on the right facing left, and the main sofa at the front facing the TV.
+// Room: 5.0 m wide (x -2.5..2.5), 3.6 m deep (z -1.8..1.8), 2.6 m high. The back wall's inner face is at z -1.8.
+const ROOM = { w: 5.0, d: 3.6, h: 2.6 };
+const WALL_Z = -1.86; // wall centre; it is 0.12 thick, so its inner face sits at -1.8
+const BACK = -1.8;
+const WIN = { x: 0.1, y: 1.72, w: 1.2, h: 0.95 }; // centred over the TV; the sill (~1.25) clears the TV top (~1.10)
+// TV cabinet (1.6 x 0.35, 0.55 high) and what stands on it. The CRT is a bit smaller than before so
+// the TV, the VCR and the photo frame all fit on the shorter cabinet without touching.
+const CAB = { x: 0.1, z: -1.63, w: 1.6, d: 0.35, h: 0.55 };
+const TV_S = 0.88; // TV size
+const TV_DS = 0.75; // TV depth squeeze, so the tube's back stays clear of the wall
+const TV_Z = BACK + 0.47 * TV_S * TV_DS + 0.01; // TV origin (world z): its back hump just clears the wall
+const SCREEN = { x: CAB.x, y: CAB.h + 0.35 * TV_S, z: TV_Z + 0.277 * TV_S * TV_DS, w: 0.64 * TV_S };
 const fx = WIN.x;
 const fy = WIN.y;
 
 // Camera poses: the whole room, the room on a phone, and close to the TV once the shelf is open.
+// The home camera stands just outside the room's open front and looks at the TV wall with a normal
+// (not wide-angle) lens: FOV 45. The TV, insert and play poses are set from the screen's position.
+const DESKTOP_FOV = 45;
 const POSES = {
-  desktop: { pos: V(-0.1, 1.75, 2.7), look: V(-0.1, 1.05, -1.4) },
-  portrait: { pos: V(-0.2, 1.25, 2.9), look: V(-0.2, 1.3, -1.4) }, // nudged left so the window, the curtain and the TV are all in frame
-  tv: { pos: V(-0.3, 0.95, 0.0), look: V(-0.3, 0.93, -1.12), close: 1 },
+  desktop: { pos: V(0, 1.5, 2.6), look: V(0, 0.9, -1.6) }, // the learner's layout spec
+  portrait: { pos: V(0.1, 1.35, 2.5), look: V(0.1, 0.95, -1.6) },
+  tv: { pos: V(SCREEN.x, SCREEN.y, SCREEN.z + 0.82), look: V(SCREEN.x, SCREEN.y - 0.015, SCREEN.z), close: 1 },
   // Pulled back a little, so the VCR shows while the tape goes in and the TV loads.
-  insert: { pos: V(0.3, 1.08, 0.8), look: V(0.05, 0.78, -1.35), close: 0.7 },
+  insert: { pos: V(SCREEN.x + 0.45, SCREEN.y + 0.12, SCREEN.z + 1.45), look: V(SCREEN.x + 0.28, SCREEN.y - 0.15, SCREEN.z - 0.2), close: 0.7 },
   // Into the TV: the screen fills the view for the VHS replay.
-  play: { pos: V(-0.3, 0.95, -0.5), look: V(-0.3, 0.95, -1.12), close: 1 },
+  play: { pos: V(SCREEN.x, SCREEN.y, SCREEN.z + 0.45), look: V(SCREEN.x, SCREEN.y, SCREEN.z), close: 1 },
 };
 let wide = POSES.desktop;
 
@@ -133,29 +146,46 @@ wallTex.texture.wrapS = wallTex.texture.wrapT = THREE.RepeatWrapping;
 wallTex.texture.repeat.set(3, 2);
 const wallMat = std(0xffffff, 0.95, 0, { map: wallTex.texture });
 
+// One wooden floor for the whole room: narrow planks of one wood, staggered joints, only a gentle
+// shade change between planks (wide planks with strong shades read as separate floors).
 const floorTex = canvasTexture(512, 512, (g, w, h) => {
   const r = rng(3);
-  for (let i = 0; i < 8; i++) { // wooden planks
-    const shade = 92 + Math.round(r() * 26);
-    g.fillStyle = `rgb(${shade + 30},${shade},${shade - 30})`;
-    g.fillRect(0, (i * h) / 8, w, h / 8);
-    g.fillStyle = 'rgba(0,0,0,0.35)';
-    g.fillRect(0, (i * h) / 8, w, 2);
+  const rows = 8; // a 1 m tile: planks 12.5 cm wide
+  for (let i = 0; i < rows; i++) {
+    const y = (i * h) / rows;
+    let x = -r() * w * 0.5;
+    while (x < w) {
+      const len = w * (0.45 + r() * 0.35);
+      const shade = 104 + Math.round(r() * 12);
+      g.fillStyle = `rgb(${shade + 34},${shade + 2},${shade - 34})`;
+      g.fillRect(x, y, len, h / rows);
+      g.fillStyle = 'rgba(40,20,5,0.35)';
+      g.fillRect(x, y, 2, h / rows); // end joint
+      x += len;
+    }
+    g.fillStyle = 'rgba(40,20,5,0.4)';
+    g.fillRect(0, y, w, 2); // long joint
+  }
+  for (let i = 0; i < 260; i++) { // a little grain
+    g.fillStyle = `rgba(60,30,10,${0.04 + r() * 0.05})`;
+    g.fillRect(r() * w, r() * h, 20 + r() * 50, 1);
   }
 });
 floorTex.texture.wrapS = floorTex.texture.wrapT = THREE.RepeatWrapping;
-floorTex.texture.repeat.set(2, 2);
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), std(0xffffff, 0.7, 0, { map: floorTex.texture }));
+const FLOOR_LEN = ROOM.d + 2.0; // reaches past the camera, so the frame never shows the floor's end
+floorTex.texture.repeat.set(ROOM.w, FLOOR_LEN);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, FLOOR_LEN), std(0xffffff, 0.7, 0, { map: floorTex.texture }));
 floor.rotation.x = -Math.PI / 2;
+floor.position.z = BACK + FLOOR_LEN / 2;
 floor.receiveShadow = true;
 scene.add(floor);
 
 // Back wall with a window opening (four boxes around the hole).
-const wallW = 5.2;
-const wallH = 3.6; // tall enough that a portrait phone screen, which sees far above the window, still finds wall
-const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), std(0xd8d4cc, 1, 0, { emissive: 0xd8d4cc, emissiveIntensity: 0.45 }));
+const wallW = ROOM.w;
+const wallH = ROOM.h;
+const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, FLOOR_LEN), std(0xd8d4cc, 1, 0, { emissive: 0xd8d4cc, emissiveIntensity: 0.45 }));
 ceiling.rotation.x = Math.PI / 2;
-ceiling.position.y = wallH;
+ceiling.position.set(0, wallH, BACK + FLOOR_LEN / 2);
 scene.add(ceiling);
 const wt = 0.12;
 const leftW = (WIN.x - WIN.w / 2) + wallW / 2;
@@ -166,13 +196,13 @@ box(WIN.w, WIN.y - WIN.h / 2, wt, wallMat, WIN.x, (WIN.y - WIN.h / 2) / 2, WALL_
 const topH = wallH - (WIN.y + WIN.h / 2);
 box(WIN.w, topH, wt, wallMat, WIN.x, wallH - topH / 2, WALL_Z);
 for (const sx of [-1, 1]) { // side walls
-  const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(8, wallH), wallMat);
-  sideWall.position.set(sx * 2.6, wallH / 2, 2);
+  const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_LEN, wallH), wallMat);
+  sideWall.position.set(sx * ROOM.w / 2, wallH / 2, BACK + FLOOR_LEN / 2);
   sideWall.rotation.y = -sx * Math.PI / 2;
   sideWall.receiveShadow = true;
   scene.add(sideWall);
 }
-box(wallW, 0.1, 0.02, std(0xe9e4d8, 0.6), 0, 0.05, WALL_Z + 0.07); // baseboard
+box(wallW, 0.1, 0.02, std(0xe9e4d8, 0.6), 0, 0.05, BACK + 0.01); // baseboard
 
 // ── Window: frame, glass, and the view outside ────────────────────────
 
@@ -367,24 +397,27 @@ const woodTex = canvasTexture(256, 256, (g, w, h) => {
 });
 const woodMat = std(0xffffff, 0.6, 0, { map: woodTex.texture });
 
-const CAB_W = 2.2;
+const CAB_W = CAB.w;
 const cab = new THREE.Group();
 cab.name = 'cabinet';
-cab.position.set(0, 0, -1.42);
+cab.position.set(CAB.x, 0, CAB.z);
 scene.add(cab);
-const cabBody = box(CAB_W, 0.5, 0.55, woodMat, 0, 0.25, 0, cab, 0.012);
-box(CAB_W + 0.02, 0.03, 0.57, woodMat, 0, 0.515, 0, cab, 0.012);
-for (const dx of [-0.72, 0, 0.72]) { // cabinet doors
-  box(0.68, 0.38, 0.012, std(0x684730, 0.6), dx, 0.25, 0.28, cab);
-  box(0.1, 0.018, 0.02, std(0xb8a77a, 0.3, 0.8), dx + (dx <= 0 ? 0.24 : -0.24), 0.25, 0.295, cab);
+const cabBody = box(CAB_W, CAB.h - 0.03, CAB.d, woodMat, 0, (CAB.h - 0.03) / 2, 0, cab, 0.012);
+box(CAB_W + 0.02, 0.03, CAB.d + 0.02, woodMat, 0, CAB.h - 0.015, 0, cab, 0.012);
+{
+  const dw = (CAB_W - 0.12) / 3;
+  for (const dx of [-dw - 0.02, 0, dw + 0.02]) { // cabinet doors
+    box(dw - 0.03, 0.4, 0.012, std(0x684730, 0.6), dx, 0.27, CAB.d / 2 + 0.006, cab);
+    box(0.08, 0.018, 0.02, std(0xb8a77a, 0.3, 0.8), dx + (dx <= 0 ? dw / 2 - 0.07 : -dw / 2 + 0.07), 0.27, CAB.d / 2 + 0.02, cab);
+  }
 }
 
 // CRT TV: a deep body, a bezel, and the screen (the app lives here later). A little bigger
 // than life so it stays the hero of the room.
 const tv = new THREE.Group();
 tv.name = 'tv';
-tv.position.set(-0.3, 0.53, -0.02);
-tv.scale.setScalar(1.2);
+tv.position.set(0, CAB.h, TV_Z - CAB.z);
+tv.scale.set(TV_S, TV_S, TV_S * TV_DS);
 cab.add(tv);
 const tvBody = std(0x24262c, 0.45, 0.1);
 box(0.82, 0.62, 0.55, tvBody, 0, 0.31, -0.04, tv, 0.03);
@@ -413,14 +446,15 @@ box(0.012, 0.012, 0.01, new THREE.MeshBasicMaterial({ color: 0xff3b3b }), 0.37, 
 // The screen glows onto the room, strongest at night. A point light held in front of the glass,
 // so it reaches the VCR, the cabinet top and the floor without a hot spot on the TV's own body.
 const tvLight = new THREE.PointLight(0x6f8cff, 0, 5, 2);
-tvLight.position.set(-0.3, 0.95, -0.7);
+tvLight.position.set(SCREEN.x, SCREEN.y, SCREEN.z + 0.4);
 scene.add(tvLight);
 
 // VCR on the cabinet, right of the TV: the clickable object.
-const VCR_Y = 0.53;
+const VCR_Y = CAB.h;
 const vcr = new THREE.Group();
 vcr.name = 'vcr';
-vcr.position.set(0.52, VCR_Y, 0.02);
+vcr.position.set(0.58, VCR_Y, 0.0); // world x 0.68
+vcr.scale.setScalar(0.8);
 cab.add(vcr);
 const vcrShell = box(0.5, 0.1, 0.36, std(0x2b2d33, 0.4, 0.25), 0, 0.05, 0, vcr, 0.012);
 box(0.3, 0.025, 0.01, std(0x0c0d10, 0.3), -0.06, 0.06, 0.182, vcr); // tape slot
@@ -444,7 +478,7 @@ const vcrHit = hitBox(0.56, 0.18, 0.44);
 vcrHit.position.set(0, 0.09, 0.03);
 vcr.add(vcrHit);
 const vcrGlow = new THREE.PointLight(0x62ff8f, 0, 0.9, 2);
-vcrGlow.position.set(0.52, 0.6, -1.0);
+vcrGlow.position.set(CAB.x + 0.58, CAB.h + 0.08, CAB.z + 0.35);
 scene.add(vcrGlow);
 
 // Photo frame on the cabinet, just left of the TV. The picture is a slot: "YOUR PHOTO" until
@@ -463,7 +497,7 @@ const photo = canvasTexture(256, 320, (g, w, h) => {
 });
 const frame = new THREE.Group();
 frame.name = 'frame';
-frame.position.set(-0.98, 0.53, 0.05);
+frame.position.set(-0.6, CAB.h, 0.02); // world x -0.50, left of the TV
 frame.rotation.y = 0.3; // turned a little toward the camera
 frame.scale.setScalar(1.12);
 cab.add(frame);
@@ -629,12 +663,20 @@ frame.add(frameHit);
 makeClickable(frame, 'frame', () => (photoImg ? openPhotoPanel() : photoInput.click()));
 frame.userData.when = () => tvMode === 'standby';
 
-// Table lamp at the right end of the cabinet: on in the evening and at night, and a click
-// switches it on or off.
+// Table lamp on a small side table right of the cabinet: on in the evening and at night, and a
+// click (or a pull on its cord) switches it on or off.
+const SIDE = { x: 1.18, z: -1.6, w: 0.34, d: 0.34, h: 0.55 };
+const sideTable = new THREE.Group();
+sideTable.name = 'sideTable';
+sideTable.position.set(SIDE.x, 0, SIDE.z);
+scene.add(sideTable);
+box(SIDE.w, 0.03, SIDE.d, woodMat, 0, SIDE.h - 0.015, 0, sideTable, 0.008); // top
+box(SIDE.w - 0.04, 0.02, SIDE.d - 0.04, woodMat, 0, 0.12, 0, sideTable, 0.006); // lower shelf
+for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(0.035, SIDE.h - 0.03, 0.035, woodMat, lx * (SIDE.w / 2 - 0.03), (SIDE.h - 0.03) / 2, lz * (SIDE.d / 2 - 0.03), sideTable, 0.006);
 const lamp = new THREE.Group();
 lamp.name = 'lamp';
-lamp.position.set(0.95, 0.53, 0.0);
-cab.add(lamp);
+lamp.position.set(0, SIDE.h, 0);
+sideTable.add(lamp);
 const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.05, 24), brass);
 lampBase.position.y = 0.025;
 const lampStem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 12), brass);
@@ -702,17 +744,17 @@ function updateCord(dt) {
 function makeBookshelf() {
   const g = new THREE.Group();
   g.name = 'bookshelf';
-  const W = 0.8;
-  const H = 2.0;
-  const D = 0.3;
+  const W = 0.9;
+  const H = 1.9;
+  const D = 0.25;
   const T = 0.035;
-  g.position.set(-1.95, 0, WALL_Z + wt / 2 + D / 2);
+  g.position.set(-1.95, 0, BACK + D / 2 + 0.015); // z -1.66
   scene.add(g);
   const wood = std(0x8f6a42, 0.7);
   box(T, H, D, wood, -W / 2 + T / 2, H / 2, 0, g);
   box(T, H, D, wood, W / 2 - T / 2, H / 2, 0, g);
   box(W - 2 * T, H, 0.012, std(0x6a4a2c, 0.85), 0, H / 2, -D / 2 + 0.01, g);
-  const boards = [0.02, 0.44, 0.86, 1.28, 1.69, H - 0.015];
+  const boards = [0.02, 0.42, 0.82, 1.22, 1.6, H - 0.015];
   for (const y of boards) box(W, 0.03, D, wood, 0, y, 0, g);
 
   const rand = rng(7);
@@ -729,7 +771,7 @@ function makeBookshelf() {
       if (x + w > xEnd) break;
       if (rand() > fill) { x += 0.05 + rand() * 0.06; continue; } // a gap
       const h = Math.min(maxH, 0.2 + rand() * 0.14);
-      const d = 0.18 + rand() * 0.06;
+      const d = 0.15 + rand() * 0.05;
       const lean = rand() > 0.93 ? (rand() > 0.5 ? 0.22 : -0.22) : 0;
       items.push({ x: x + w / 2, y: floorY + h / 2, z: D / 2 - 0.03 - d / 2, w, h, d, lean, c: palette[Math.floor(rand() * palette.length)] });
       x += w + 0.003 + (lean ? 0.03 : 0);
@@ -758,7 +800,7 @@ const bookshelf = makeBookshelf();
 // armchair on the right facing left (they face each other across the table), and a long low sofa in
 // front of the table facing the TV. The long sofa sits a little to the left, which leaves a clear
 // walkway on the right into the TV corner. Nothing stands between the camera and the photo frame.
-function makeSofa(name, width, color, cushionColor, backH = 0.42) {
+function makeSofa(name, width, color, cushionColor, backH = 0.53, seatsWanted = 0) {
   const g = new THREE.Group();
   g.name = name;
   scene.add(g);
@@ -767,34 +809,37 @@ function makeSofa(name, width, color, cushionColor, backH = 0.42) {
   const leg = std(0x4a3222, 0.6);
   const hw = width / 2;
   for (const [lx, lz] of [[-hw + 0.06, -0.29], [hw - 0.06, -0.29], [-hw + 0.06, 0.29], [hw - 0.06, 0.29]]) box(0.05, 0.1, 0.05, leg, lx, 0.05, lz, g);
+  g.scale.z = 0.75 / 0.72; // 0.75 m deep
   box(width, 0.22, 0.72, fabric, 0, 0.21, 0, g, 0.05); // base
   box(width, backH, 0.18, fabric, 0, 0.32 + backH / 2, -0.27, g, 0.06); // back
   for (const ax of [-hw + 0.07, hw - 0.07]) box(0.14, 0.34, 0.72, fabric, ax, 0.47, 0, g, 0.06); // arms
-  const seats = Math.round((width - 0.28) / 0.4);
+  const seats = seatsWanted || Math.round((width - 0.28) / 0.4);
   const sw = (width - 0.28) / seats;
   for (let i = 0; i < seats; i++) {
     const cx = -hw + 0.14 + sw * (i + 0.5);
-    box(sw - 0.02, 0.13, 0.5, cushion, cx, 0.39, 0.08, g, 0.05); // seat cushion
+    box(sw - 0.02, 0.13, 0.5, cushion, cx, 0.355, 0.08, g, 0.05); // seat cushion (top at 0.42 m)
     box(sw - 0.02, backH * 0.66, 0.12, cushion, cx, 0.46 + backH * 0.26, -0.15, g, 0.05).rotation.x = -0.2; // back cushion
   }
   return g;
 }
-const sofa = makeSofa('sofa', 1.0, 0x3e7c80, 0x4a8c90);
-sofa.position.set(-1.5, 0, -0.72);
+// Small sofa (2 seats) on the left: 1.2 m long along z, facing +x (the middle of the room).
+const sofa = makeSofa('sofa', 1.2, 0x3e7c80, 0x4a8c90, 0.53, 2);
+sofa.position.set(-1.98, 0, 0.3);
 sofa.rotation.y = Math.PI / 2; // faces right, toward the armchair
 box(0.24, 0.24, 0.09, std(0xb5654a, 0.9), 0.28, 0.55, -0.04, sofa, 0.04).rotation.set(-0.1, -0.35, 0.15); // a pillow
 
-// A low back, so the table, the cabinet and the photo frame stay in view over it.
-const longSofa = makeSofa('longSofa', 1.3, 0x3e7c80, 0x4a8c90, 0.24);
-longSofa.position.set(-0.5, 0, 0.0);
+// Main sofa (3 seats) at the front, facing the TV: 1.8 x 0.75, its front edge about 2.3 m from the TV.
+const longSofa = makeSofa('longSofa', 1.8, 0x3e7c80, 0x4a8c90, 0.53, 3);
+longSofa.position.set(0, 0, 1.33);
 longSofa.rotation.y = Math.PI; // faces the TV, its back to the camera
 
 // Armchair on the right, facing the sofa across the table.
 function makeArmchair() {
   const g = new THREE.Group();
   g.name = 'armchair';
-  g.position.set(1.1, 0, -0.72);
+  g.position.set(1.85, 0, 0.22);
   g.rotation.y = -Math.PI / 2; // faces left
+  g.scale.set(0.7 / 0.62, 1.06, 0.75 / 0.62); // 0.7 wide, 0.75 deep, back 0.85 high
   scene.add(g);
   const fabric = std(0xc98a4b, 0.9);
   const cushion = std(0xd99c5c, 0.9);
@@ -813,13 +858,12 @@ const armchair = makeArmchair();
 function makeTable() {
   const g = new THREE.Group();
   g.name = 'table';
-  g.position.set(-0.2, 0, -0.68);
-  g.rotation.y = 0.04;
+  g.position.set(0, 0, 0.18);
   scene.add(g);
   const wood = std(0x9a6b42, 0.6);
-  box(0.95, 0.04, 0.5, wood, 0, 0.38, 0, g, 0.012); // top
-  box(0.86, 0.025, 0.42, std(0x7d5634, 0.7), 0, 0.12, 0, g, 0.008); // lower shelf
-  for (const [lx, lz] of [[-0.42, -0.2], [0.42, -0.2], [-0.42, 0.2], [0.42, 0.2]]) box(0.04, 0.38, 0.04, wood, lx, 0.19, lz, g, 0.008);
+  box(0.8, 0.04, 0.45, wood, 0, 0.38, 0, g, 0.012); // top (0.40 high)
+  box(0.72, 0.025, 0.37, std(0x7d5634, 0.7), 0, 0.12, 0, g, 0.008); // lower shelf
+  for (const [lx, lz] of [[-0.36, -0.18], [0.36, -0.18], [-0.36, 0.18], [0.36, 0.18]]) box(0.04, 0.38, 0.04, wood, lx, 0.19, lz, g, 0.008);
   const r = rng(21);
   const palette = [0xb9483c, 0x3f7f86, 0xe3d6b4, 0x2f4f7a, 0xd18b3a, 0x6a8f4e];
   const stack = (x, z, n, rot, y = 0.4) => { // a stack of books, each a little turned; y = the surface
@@ -832,8 +876,8 @@ function makeTable() {
       y += h;
     }
   };
-  stack(-0.28, -0.04, 4, 0.1);
-  stack(0.3, 0.06, 2, -0.3);
+  stack(-0.24, -0.04, 4, 0.1);
+  stack(0.24, 0.06, 2, -0.3);
   const paper = std(0xf4f0e6, 0.95);
   for (let i = 0; i < 4; i++) { // loose sheets, fanned out
     const p = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.002, 0.21), paper);
@@ -847,7 +891,7 @@ function makeTable() {
   pen.rotation.set(Math.PI / 2, 0, 0.7);
   pen.position.set(0.05, 0.415, 0.12);
   g.add(pen);
-  stack(0.18, 0.02, 3, 0.4, 0.1325); // and a few on the lower shelf
+  stack(0.14, 0.02, 3, 0.4, 0.1325); // and a few on the lower shelf
   return g;
 }
 const table = makeTable();
@@ -876,9 +920,9 @@ const rugTex = canvasTexture(512, 320, (g, w, h) => {
     g.fill();
   }
 });
-const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 2.1), std(0xffffff, 1, 0, { map: rugTex.texture }));
+const rug = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.95), std(0xffffff, 1, 0, { map: rugTex.texture }));
 rug.rotation.x = -Math.PI / 2;
-rug.position.set(-0.25, 0.006, -0.52);
+rug.position.set(0, 0.01, 0.17);
 rug.receiveShadow = true;
 scene.add(rug);
 
@@ -890,7 +934,8 @@ const clockGroup = new THREE.Group();
 clockGroup.name = 'clock';
 const CLOCK_W = 0.48;
 const CLOCK_D = 0.3;
-clockGroup.position.set(1.62, 0, WALL_Z + wt / 2 + CLOCK_D / 2 + 0.01);
+clockGroup.position.set(2.25, 0, -1.6);
+clockGroup.scale.set(0.4 / 0.53, 1.0, 0.4 / 0.39); // footprint 0.4 x 0.4 (the model is 0.53 x 0.39 with its trim), 2.0 m tall
 scene.add(clockGroup);
 const carveTex = canvasTexture(256, 512, (g, w, h) => { // carved teak: grain, then a vine relief
   const r = rng(31);
@@ -1060,10 +1105,12 @@ function makePainting(file, w, h, place) {
   return g;
 }
 // Back wall, right of the window (above the VCR and the lamp): the mountain, then the flowers.
-makePainting('painting-gunung.jpg', 0.72, 0.54, (g) => g.position.set(0.45, 1.86, WALL_Z + wt / 2 + 0.02));
-makePainting('painting-bunga.jpg', 0.33, 0.44, (g) => g.position.set(1.1, 1.86, WALL_Z + wt / 2 + 0.02));
+// Right of the window (the curtain rod ends near x 1.12): landscape above the lamp, flowers beside it.
+makePainting('painting-gunung.jpg', 0.56, 0.42, (g) => g.position.set(1.3, 1.72, BACK + 0.02)); // x 0.98..1.62
+makePainting('painting-bunga.jpg', 0.26, 0.35, (g) => g.position.set(1.83, 1.72, BACK + 0.02)); // x 1.67..1.99, clear of the clock (2.05)
 // Left side wall, beside the bookshelf: the rice terraces.
-makePainting('painting-sawah.jpg', 0.7, 0.53, (g) => { g.position.set(-2.6 + 0.02, 1.62, -1.45); g.rotation.y = Math.PI / 2; });
+// Left wall, about 1.5 m up, centred over the small sofa.
+makePainting('painting-sawah.jpg', 0.72, 0.54, (g) => { g.position.set(-ROOM.w / 2 + 0.02, 1.5, 0.3); g.rotation.y = Math.PI / 2; });
 // ── Lights ────────────────────────────────────────────────────────────
 
 // One direction for everything that is "the sun": the light itself, the visible shafts and the
@@ -1569,8 +1616,10 @@ function resize() {
   wide = aspect < 0.9 ? POSES.portrait : POSES.desktop;
   if (wasWide) { cam.to = wide; if (cam.t >= 1 || cam.to === null) { camPos.copy(wide.pos); camLook.copy(wide.look); } }
   const dist = wide.pos.distanceTo(wide.look);
-  const need = aspect < 0.9 ? 3.3 : Math.max(5.8, 3.3 * aspect);
-  camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(need / 2 / dist / aspect)), 36, 70);
+  // Desktop: a fixed 45° lens. A window narrower than 16:10 widens the vertical FOV just enough to
+  // keep the 5 m back wall in frame; a phone frames the TV corner.
+  const keepWidth = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(DESKTOP_FOV / 2)) * 1.6 / aspect));
+  camera.fov = aspect < 0.9 ? THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(3.3 / 2 / dist / aspect)), 36, 75) : Math.max(DESKTOP_FOV, Math.min(keepWidth, 60));
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -1715,7 +1764,7 @@ renderer.setAnimationLoop((now) => {
 });
 
 // For the automated checks.
-const named = { vcr: vcrShell, screen, frame, lamp, sofa, longSofa, armchair, table, bookshelf, clock: clockGroup, window: windowGroup, cabinet: cabBody,
+const named = { vcr: vcrShell, screen, frame, lamp, sideTable, sofa, longSofa, armchair, table, rug, bookshelf, clock: clockGroup, window: windowGroup, cabinet: cabBody, tv,
   paintingLeft: paintings[2], paintingRight: paintings[0], paintingFlowers: paintings[1] };
 const _part = new THREE.Box3();
 // Bounding box of the solid meshes only: glows, light shafts and invisible click boxes don't count.
@@ -1779,6 +1828,26 @@ window.__room = {
   },
   cord: () => ({ ext: cord.ext, held: cord.held, swing: cord.swing }),
   rotY: (name) => named[name].rotation.y,
+  names: () => Object.fromEntries(Object.keys(named).map((k) => [k, 1])),
+  setVisible: (name, on) => { named[name].visible = on; },
+  // Share of the frame where the first thing the eye ray meets is part of the named object.
+  coverageOf: (name, step = 0.04) => {
+    const rc = new THREE.Raycaster();
+    const root = named[name];
+    let n = 0, hit = 0, top = -1;
+    for (let y = -1 + step / 2; y < 1; y += step) for (let x = -1 + step / 2; x < 1; x += step) {
+      n++;
+      rc.setFromCamera(new THREE.Vector2(x, y), camera);
+      const h = rc.intersectObjects(scene.children, true).find((q) => q.object.raycast !== NOOP && q.object.material?.visible !== false);
+      if (!h) continue;
+      let o = h.object;
+      while (o && o !== root) o = o.parent;
+      if (o === root) { hit++; top = Math.max(top, y); }
+    }
+    return { area: hit / n, fromBottom: (top + 1) / 2 };
+  },
+  seatTop: () => { const b = new THREE.Box3(); longSofa.traverse((o) => { if (o.isMesh && o.geometry.parameters?.height === 0.13) b.union(new THREE.Box3().setFromObject(o)); }); return b.max.y; },
+  screenZ: () => screen.getWorldPosition(V(0, 0, 0)).z,
   // Which objects stand between the camera and a target: rays to a grid of points on it.
   frameBlockedBy: () => blockedBy(pic),
   screenBlockedBy: () => blockedBy(screen),
