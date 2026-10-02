@@ -211,6 +211,7 @@ const wallH = ROOM.h;
 const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, FLOOR_LEN), std(0xd8d4cc, 1, 0, { emissive: 0xd8d4cc, emissiveIntensity: 0.45 }));
 ceiling.rotation.x = Math.PI / 2;
 ceiling.position.set(0, wallH, BACK + FLOOR_LEN / 2);
+ceiling.castShadow = true; // the sun comes from above and behind: without this it shines through the roof
 scene.add(ceiling);
 const wt = 0.12;
 const leftW = (WIN.x - WIN.w / 2) + wallW / 2;
@@ -225,6 +226,7 @@ for (const sx of [-1, 1]) { // side walls
   sideWall.position.set(sx * ROOM.w / 2, wallH / 2, BACK + FLOOR_LEN / 2);
   sideWall.rotation.y = -sx * Math.PI / 2;
   sideWall.receiveShadow = true;
+  sideWall.castShadow = true; // or the sun shines through the left wall onto the sofa and the floor
   scene.add(sideWall);
 }
 box(wallW, 0.1, 0.02, std(0xe9e4d8, 0.6), 0, 0.05, BACK + 0.01); // baseboard
@@ -457,8 +459,9 @@ const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.48), new THREE.Mes
 screen.position.set(0, 0.35, 0.277);
 screen.renderOrder = 1;
 tv.add(screen);
-// The standby picture ("PRESS THE VCR") and the tape going in are drawn on a canvas over the hole;
-// it fades out when the camera goes into the TV, uncovering the real app.
+// The standby picture ("PRESS THE VCR") and the tape going in are drawn on a canvas over the hole.
+// It never fades: it cuts like a TV changing input, with the same freeze + glitch as the app's own
+// screen changes (learner request), uncovering the real app or covering it again.
 const tvTex = canvasTexture(640, 480, () => {});
 const standbyMat = new THREE.MeshBasicMaterial({ map: tvTex.texture, transparent: true, opacity: 1, toneMapped: false });
 const standby = noPick(new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.48), standbyMat));
@@ -1209,13 +1212,33 @@ sun.castShadow = true;
 // The shadow box hugs the room (5 x 3.6 m seen along the sun), so a 1024 map is as sharp as the old
 // 2048 one over 7 m, at a quarter of the memory and fill. radius softens the edge like a real window.
 sun.shadow.mapSize.set(1024, 1024);
-Object.assign(sun.shadow.camera, { left: -3.1, right: 3.1, top: 2.6, bottom: -2.6, near: 5, far: 14 });
-sun.shadow.camera.updateProjectionMatrix();
+scene.add(sun, sun.target);
 sun.shadow.bias = -0.0005;
 sun.shadow.normalBias = 0.025;
 sun.shadow.radius = 3;
 sun.shadow.blurSamples = 8;
-scene.add(sun, sun.target);
+// Fit the shadow box to the whole room as the sun sees it: every corner (floor to ceiling, back wall to
+// past the camera) inside, with a small margin. A box smaller than the room ends in a hard straight line
+// across the walls and the floor (the learner spotted two of them).
+{
+  const cam = sun.shadow.camera;
+  sun.updateMatrixWorld(true);
+  sun.target.updateMatrixWorld(true);
+  cam.position.copy(sun.position);
+  cam.lookAt(sun.target.position);
+  cam.updateMatrixWorld(true);
+  const inv = cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+  const lo = V(Infinity, Infinity, Infinity);
+  const hi = V(-Infinity, -Infinity, -Infinity);
+  for (const x of [-ROOM.w / 2, ROOM.w / 2]) for (const y of [0, ROOM.h]) for (const zz of [WALL_Z - 0.1, BACK + ROOM.d + 2.0]) {
+    const p = V(x, y, zz).applyMatrix4(inv);
+    lo.min(p);
+    hi.max(p);
+  }
+  const m = 0.15;
+  Object.assign(cam, { left: lo.x - m, right: hi.x + m, bottom: lo.y - m, top: hi.y + m, near: Math.max(0.1, -hi.z - 1), far: -lo.z + 1 });
+  cam.updateProjectionMatrix();
+}
 
 // The sun you can see in the window (upper left), and soft shafts of light leaving the window
 // along SUN_DIR. The disc sits behind the wall, so it shifts a little when the camera turns,
@@ -1374,10 +1397,10 @@ function recDot(g, x, y, r, color) {
   g.fill();
 }
 
-function drawScreen(t) {
-  const g = tvTex.canvas.getContext('2d');
-  const w = tvTex.canvas.width;
-  const h = tvTex.canvas.height;
+function drawPicture(t) {
+  const g = tvClean.getContext('2d');
+  const w = tvClean.width;
+  const h = tvClean.height;
   if (tvMode === 'standby') {
     g.fillStyle = '#1d2fb8';
     g.fillRect(0, 0, w, h);
@@ -1423,6 +1446,63 @@ function drawScreen(t) {
   }
   g.fillStyle = 'rgba(0,0,0,0.22)'; // scanlines
   for (let y = 0; y < h; y += 4) g.fillRect(0, y, w, 2);
+}
+
+
+// The TV's picture cut (Update side). covered = the canvas picture is over the glass (standby, the tape
+// going in); otherwise the real app shows. A change runs: freeze (the old picture holds still), then
+// tear (bands of the picture jump sideways with a red/blue split, the other picture showing through the
+// gaps), stepped like the app's own screen change in css/vhs.css.
+const tvClean = document.createElement('canvas');
+tvClean.width = 640;
+tvClean.height = 480;
+const CUT_FREEZE = 0.14;
+const CUT_TEAR = 0.22;
+let covered = true;
+let cutT = Infinity;
+let cutDir = 'in';
+function startCut(toCovered) {
+  if (covered === toCovered) return;
+  covered = toCovered;
+  cutDir = toCovered ? 'in' : 'out';
+  cutT = reduced.matches ? Infinity : 0; // reduced motion: a plain cut
+}
+let cutHold = null; // checks only
+function drawScreen(t, dt) {
+  cutT = cutHold ?? cutT + dt;
+  const active = cutT < CUT_FREEZE + CUT_TEAR;
+  // Going out, the picture freezes: it isn't redrawn. Otherwise draw it live (coming in it is drawn but
+  // not shown during the freeze, while the app's own screen holds still).
+  if (covered) drawPicture(t);
+  const g = tvTex.canvas.getContext('2d');
+  const w = tvTex.canvas.width;
+  const h = tvTex.canvas.height;
+  g.clearRect(0, 0, w, h);
+  standby.visible = covered || active;
+  if (!active) {
+    if (covered) g.drawImage(tvClean, 0, 0);
+  } else if (cutT < CUT_FREEZE) {
+    if (cutDir === 'out') g.drawImage(tvClean, 0, 0);
+  } else {
+    const step = Math.min(3, Math.floor(((cutT - CUT_FREEZE) / CUT_TEAR) * 4)); // 4 hard steps
+    const shown = cutDir === 'out' ? 0.75 - step * 0.22 : 0.3 + step * 0.22; // share of bands still/already there
+    const r = rng(101 + step * 17 + (cutDir === 'in' ? 5 : 0));
+    const bands = 10;
+    for (let i = 0; i < bands; i++) {
+      if (r() > shown) continue;
+      const y0 = Math.floor((i * h) / bands);
+      const bh = Math.ceil(h / bands);
+      const dx = Math.round((r() - 0.5) * 70 * (1 - step * 0.2));
+      g.drawImage(tvClean, 0, y0, w, bh, dx, y0, w, bh);
+      // red/blue split at the band's edges, like a worn tape losing sync
+      g.fillStyle = 'rgba(255,50,50,0.55)';
+      g.fillRect(dx - 8, y0, 8, bh);
+      g.fillStyle = 'rgba(60,120,255,0.55)';
+      g.fillRect(dx + w - 2, y0, 8, bh);
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(0, y0, w, 2);
+    }
+  }
   tvTex.texture.needsUpdate = true;
 }
 
@@ -1495,6 +1575,7 @@ function setMode(m) {
   hint.classList.toggle('is-button', !inRoom);
   document.body.classList.toggle('zoomed', !inRoom);
   setAppLive(false);
+  startCut(m === 'standby' || m === 'insert'); // the canvas picture covers the glass in the room and while the tape goes in
   if (m === 'standby') {
     goTo(wide);
     cassette.visible = false;
@@ -1663,11 +1744,6 @@ renderer.setAnimationLoop((now) => {
   }
   // Once the camera has arrived in the TV, the app takes clicks and typing.
   if ((tvMode === 'app' || tvMode === 'play') && cam.t >= 1 && appScreen.inert) setAppLive(true);
-  // The standby picture covers the app in the room and while the tape goes in; it fades away as the
-  // camera goes into the TV, or as the blue screen comes up.
-  const cover = tvMode === 'standby' ? 1 - THREE.MathUtils.smoothstep(close, 0.3, 0.95) : tvMode === 'insert' ? 1 : 0;
-  standbyMat.opacity += (cover - standbyMat.opacity) * k(reduced.matches ? 60 : 10, dt);
-  standby.visible = standbyMat.opacity > 0.01;
   updateCord(dt);
   updateClock(t);
   const amount = 1 - 0.6 * z;
@@ -1759,7 +1835,7 @@ renderer.setAnimationLoop((now) => {
   pressT = Math.min(1, pressT + dt * 6);
   vcr.position.y = VCR_Y - Math.sin(pressT * Math.PI) * 0.006;
 
-  drawScreen(t);
+  drawScreen(t, dt);
   drawVcrDisplay(t);
   // Sun shadow: redrawn every third frame while the cloth breathes and every frame while something
   // moves fast (the curtain sliding, the cord swinging); never while the camera is inside the TV,
@@ -1894,7 +1970,10 @@ window.__room = {
   status: () => status,
   getMode: () => tvMode,
   live: () => !appScreen.inert,
-  seq: () => ({ mode: tvMode, t: seqT, cassette: cassette.visible, cassetteZ: cassette.position.z, close, camT: cam.t, playing, cover: standbyMat.opacity }),
+  seq: () => ({ mode: tvMode, t: seqT, cassette: cassette.visible, cassetteZ: cassette.position.z, close, camT: cam.t, playing, cover: cutT < CUT_FREEZE + CUT_TEAR ? 0.5 : covered ? 1 : 0 }),
+  cut: () => ({ t: cutT, dir: cutDir, covered, visible: standby.visible }),
+  // Hold the cut at a fixed time, for screenshots (null lets it run again).
+  holdCut: (sec) => { cutHold = sec; },
   // Where the glass is on screen, in CSS pixels (its four corners projected by the camera).
   glassRect: () => {
     const c = [[-0.32, 0.24], [0.32, 0.24], [0.32, -0.24], [-0.32, -0.24]].map(([x, y]) => toPixels(screen.localToWorld(V(x, y, 0))));
@@ -1970,6 +2049,29 @@ window.__room = {
     return { from: at(from), to: at(to) };
   },
   setShafts: (on) => { for (const d of shafts) d.mesh.visible = on; },
+  setSunDisc: (on) => { sunDisc.visible = on; },
+  setSunShadow: (on) => { sun.castShadow = on; shadowsDirty = true; },
+  setContact: (on) => { for (const m of contact) m.visible = on; },
+  // Where room corners land in the sun shadow's box (NDC); outside -1..1 means no shadow there.
+  shadowCoverage: () => {
+    const c = sun.shadow.camera;
+    c.updateMatrixWorld(true);
+    c.updateProjectionMatrix();
+    const out = [];
+    for (const x of [-ROOM.w / 2, ROOM.w / 2]) for (const y of [0, ROOM.h]) for (const zz of [BACK, BACK + FLOOR_LEN]) {
+      const p = V(x, y, zz).applyMatrix4(c.matrixWorldInverse).applyMatrix4(c.projectionMatrix);
+      out.push({ at: [x, y, +zz.toFixed(2)], ndc: [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)] });
+    }
+    return out;
+  },
+  // The sun shadow's box in world space (its 8 corners), to see what it covers.
+  shadowBox: () => {
+    const c = sun.shadow.camera;
+    c.updateMatrixWorld(true);
+    const pts = [];
+    for (const x of [c.left, c.right]) for (const y of [c.bottom, c.top]) for (const zz of [-c.near, -c.far]) pts.push(V(x, y, zz).applyMatrix4(c.matrixWorld).toArray().map((v) => +v.toFixed(2)));
+    return pts;
+  },
   shaftOpacity: () => shafts[0].mat.opacity,
 };
 
