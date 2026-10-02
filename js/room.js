@@ -797,7 +797,7 @@ cordLine.geometry.translate(0, -0.5, 0); // hangs down from its top point
 const bead = new THREE.Mesh(new THREE.SphereGeometry(0.014, 12, 10), std(0xb8964a, 0.35, 0.8));
 const beadHit = hitBox(0.08, 0.1, 0.08);
 bead.add(beadHit);
-cordLine.castShadow = bead.castShadow = true;
+// The cord casts no shadow: it swings, and the baked shadow map is only redrawn when the curtain moves.
 lamp.add(cordLine, bead);
 const cord = { ext: 0, vel: 0, swing: 0, swingVel: 0, held: false, startY: 0, clicked: false };
 function pullCord() { // a plain click: a short pull that is enough to click the lamp
@@ -1837,11 +1837,11 @@ renderer.setAnimationLoop((now) => {
 
   drawScreen(t, dt);
   drawVcrDisplay(t);
-  // Sun shadow: redrawn every third frame while the cloth breathes and every frame while something
-  // moves fast (the curtain sliding, the cord swinging); never while the camera is inside the TV,
-  // where the room is hidden behind the app.
-  const moving = Math.abs(cloth.vel) > 0.02 || cord.held || Math.abs(cord.vel) > 0.05 || Math.abs(cord.swingVel) > 0.05;
-  if (shadowsDirty || (close < 0.98 && (moving || frameNo % 3 === 0))) {
+  // Sun shadow, baked: the sun and the room don't move, so the shadow map is drawn once and again only
+  // while the curtain slides (it is the one big thing that casts a moving shadow); never while the
+  // camera is inside the TV. The cord, the pendulum and the cloth's breathing are too small to matter.
+  const moving = Math.abs(curtainTarget - curtainAmount) > 0.002 || Math.abs(cloth.lag) > 0.004;
+  if (shadowsDirty || (close < 0.98 && moving)) {
     renderer.shadowMap.needsUpdate = true;
     shadowsDirty = false;
   }
@@ -1903,10 +1903,12 @@ function ndcSpan(name) { // horizontal and vertical extent on screen (NDC) of an
   }
   return { x0, x1, y0, y1 };
 }
-// ── Contact shadows (baked, nearly free) ─────────────────────────────
+// ── Baked ambient occlusion on the floor (learner request: baked, light, balanced) ──
 // The sun's shadow only exists where the sun reaches, so furniture elsewhere looked as if it floated.
-// Like a baked AO decal in Unity: a soft dark patch on the floor under each piece, and a dark band where
-// the walls meet the floor. One small texture, a handful of see-through quads, no extra render pass.
+// Like a baked AO lightmap in Unity: once, at start, every piece's footprint is painted into one canvas
+// covering the floor (a wide soft layer, then a tight dark one at the contact points: whole bases for
+// pieces that stand on the floor, small dots under legs), and one see-through quad lays it over the
+// floor and the rug. One texture, one draw call, nothing per frame.
 const blobTex = canvasTexture(128, 128, (g, w, h) => {
   const grd = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
   grd.addColorStop(0, 'rgba(0,0,0,1)');
@@ -1924,26 +1926,63 @@ const aoBandTex = canvasTexture(8, 64, (g, w, h) => {
 });
 const contact = [];
 const contactMat = (map, opacity) => new THREE.MeshBasicMaterial({ map, color: 0x000000, transparent: true, opacity, depthWrite: false, toneMapped: false });
-// A blob a little larger than the footprint, a few millimetres above the rug so it shows on both.
-function blobUnder(root, opacity, grow = 0.18) {
-  const b = solidBox(root);
-  const m = noPick(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), contactMat(blobTex.texture, opacity)));
+const AO_PX = 200; // canvas pixels per metre
+const AO_MARGIN = 0.4; // the floor map reaches a little past the room on every side
+const aoW = Math.round((ROOM.w + 2 * AO_MARGIN) * AO_PX);
+const aoD = Math.round((ROOM.d + 2 * AO_MARGIN) * AO_PX);
+const aoCanvas = document.createElement('canvas');
+aoCanvas.width = aoW;
+aoCanvas.height = aoD;
+const toAo = (x, z) => [(x + ROOM.w / 2 + AO_MARGIN) * AO_PX, (z - BACK + AO_MARGIN) * AO_PX];
+// kind: 'base' = stands on the floor with its whole bottom; 'legs' = on legs at the corners.
+const AO_PIECES = [
+  [cab, 'base', 1.0], [bookshelf, 'base', 1.0], [clockGroup, 'base', 0.9],
+  [sofa, 'legs', 1.0], [longSofa, 'legs', 1.0], [armchair, 'legs', 1.0],
+  [table, 'legs', 0.85], [sideTable, 'legs', 0.75],
+];
+{
+  const g = aoCanvas.getContext('2d');
+  const rect = (b, grow) => {
+    const [x0, z0] = toAo(b.min.x - grow, b.min.z - grow);
+    const [x1, z1] = toAo(b.max.x + grow, b.max.z + grow);
+    g.fillRect(x0, z0, x1 - x0, z1 - z0);
+  };
+  // 1. wide, soft: the light the piece takes away from the floor around it
+  g.filter = `blur(${Math.round(0.16 * AO_PX)}px)`;
+  for (const [root, , k] of AO_PIECES) {
+    g.fillStyle = `rgba(0,0,0,${0.42 * k})`;
+    rect(solidBox(root), 0.06);
+  }
+  // 2. tight and darker: where it actually touches the floor
+  g.filter = `blur(${Math.round(0.035 * AO_PX)}px)`;
+  for (const [root, kind, k] of AO_PIECES) {
+    const b = solidBox(root);
+    if (kind === 'base') {
+      g.fillStyle = `rgba(0,0,0,${0.55 * k})`;
+      rect(b, -0.01);
+    } else {
+      g.fillStyle = `rgba(0,0,0,${0.32 * k})`; // the seat or top shades the floor under it
+      rect(b, -0.06);
+      g.fillStyle = `rgba(0,0,0,${0.6 * k})`;
+      const inset = 0.07;
+      for (const x of [b.min.x + inset, b.max.x - inset]) for (const z of [b.min.z + inset, b.max.z - inset]) {
+        const [px, pz] = toAo(x, z);
+        g.beginPath();
+        g.arc(px, pz, 0.045 * AO_PX, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+  g.filter = 'none';
+  const tex = new THREE.CanvasTexture(aoCanvas);
+  tex.anisotropy = 4;
+  const m = noPick(new THREE.Mesh(new THREE.PlaneGeometry(aoW / AO_PX, aoD / AO_PX), contactMat(tex, 1)));
   m.rotation.x = -Math.PI / 2;
-  m.scale.set(b.max.x - b.min.x + grow, b.max.z - b.min.z + grow, 1);
-  m.position.set((b.min.x + b.max.x) / 2, 0.013, (b.min.z + b.max.z) / 2);
+  m.position.set(0, 0.013, BACK - AO_MARGIN + aoD / AO_PX / 2); // just above the rug, so it shades both
   m.renderOrder = 1;
   scene.add(m);
   contact.push(m);
 }
-// Solid pieces sit flat on the floor (dark, tight); legged ones only shade the floor softly.
-blobUnder(cab, 0.62, 0.34);
-blobUnder(bookshelf, 0.62, 0.34);
-blobUnder(clockGroup, 0.58, 0.3);
-blobUnder(sofa, 0.6, 0.36);
-blobUnder(longSofa, 0.6, 0.36);
-blobUnder(armchair, 0.6, 0.36);
-blobUnder(table, 0.42, 0.34);
-blobUnder(sideTable, 0.42, 0.3);
 // Where the walls meet the floor: a band on the floor along each wall and one up the wall's foot.
 function aoBand(w, h, x, y, z, rotX, rotY, opacity) {
   const m = noPick(new THREE.Mesh(new THREE.PlaneGeometry(w, h), contactMat(aoBandTex.texture, opacity)));
