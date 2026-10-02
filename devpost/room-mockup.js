@@ -1109,8 +1109,9 @@ function makePainting(file, w, h, place) {
 makePainting('painting-gunung.jpg', 0.56, 0.42, (g) => g.position.set(1.3, 1.72, BACK + 0.02)); // x 0.98..1.62
 makePainting('painting-bunga.jpg', 0.26, 0.35, (g) => g.position.set(1.83, 1.72, BACK + 0.02)); // x 1.67..1.99, clear of the clock (2.05)
 // Left side wall, beside the bookshelf: the rice terraces.
-// Left wall, about 1.5 m up, centred over the small sofa.
-makePainting('painting-sawah.jpg', 0.72, 0.54, (g) => { g.position.set(-ROOM.w / 2 + 0.02, 1.5, 0.3); g.rotation.y = Math.PI / 2; });
+// Back wall above the bookshelf (learner's choice: with the 45° camera a painting on the left wall
+// falls outside the frame). The shelf tops out at 1.9 m and the ceiling is at 2.6 m.
+makePainting('painting-sawah.jpg', 0.6, 0.45, (g) => g.position.set(-1.95, 2.2, BACK + 0.02));
 // ── Lights ────────────────────────────────────────────────────────────
 
 // One direction for everything that is "the sun": the light itself, the visible shafts and the
