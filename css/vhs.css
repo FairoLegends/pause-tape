@@ -92,6 +92,89 @@
   }
 }
 
+/* ── Screen change: freeze, then glitch (js/motion.js > switchGlitch) ── */
+
+/* The old picture, frozen. It sits over the new screen (under the VHS layers) and takes no clicks. */
+.freeze {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 50% 45%, #0b1222 0%, var(--glass) 70%);
+  animation: vhs-freeze 340ms steps(1, end) forwards;
+}
+
+.freeze--blue {
+  background: var(--vcr-blue);
+}
+
+/* A held VHS frame shows a thin noise bar near the bottom. */
+.freeze::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 78%;
+  height: 7px;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0 3px, transparent 3px 7px, rgba(255, 255, 255, 0.15) 7px 9px, transparent 9px 14px);
+  opacity: 0.8;
+}
+
+/* 0–40 %: still. Then bands of the old picture jump sideways with a red/blue split, the new screen
+   showing through the gaps, until the old picture is gone. Stepped, so it cuts like tape, not slides. */
+@keyframes vhs-freeze {
+  0%,
+  39% {
+    transform: none;
+    filter: none;
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  40% {
+    transform: translateX(-14px);
+    filter: drop-shadow(4px 0 0 rgba(255, 50, 50, 0.85)) drop-shadow(-4px 0 0 rgba(50, 110, 255, 0.85));
+    clip-path: inset(0 0 58% 0);
+  }
+  55% {
+    transform: translateX(10px);
+    filter: drop-shadow(-3px 0 0 rgba(255, 50, 50, 0.8)) drop-shadow(3px 0 0 rgba(50, 110, 255, 0.8));
+    clip-path: inset(30% 0 34% 0);
+  }
+  70% {
+    transform: translateX(-6px);
+    filter: drop-shadow(2px 0 0 rgba(255, 50, 50, 0.7)) drop-shadow(-2px 0 0 rgba(50, 110, 255, 0.7));
+    clip-path: inset(66% 0 6% 0);
+  }
+  85%,
+  100% {
+    transform: none;
+    filter: none;
+    clip-path: inset(100% 0 0 0);
+    opacity: 0;
+  }
+}
+
+/* The new screen jitters once as the picture locks on, after the freeze. */
+.lock-on {
+  animation: vhs-lock-on 200ms steps(1, end) 140ms;
+}
+
+@keyframes vhs-lock-on {
+  0% {
+    transform: translateX(6px);
+    filter: drop-shadow(-2px 0 0 rgba(255, 50, 50, 0.6)) drop-shadow(2px 0 0 rgba(50, 110, 255, 0.6));
+  }
+  50% {
+    transform: translateX(-3px);
+    filter: none;
+  }
+  100% {
+    transform: none;
+    filter: none;
+  }
+}
+
 /* ── Blue VCR screen: a loading bar, like a tape being read ─────── */
 
 /* Fixed-size cells that light up one by one, left to right: real progress, never stretched. */
@@ -122,7 +205,9 @@
     animation: none;
   }
 
-  .glitch {
+  .glitch,
+  .freeze,
+  .lock-on {
     animation: none;
   }
 }

@@ -1,5 +1,5 @@
-// Motion: GSAP does the "signal tuning in" moments — text scrambling into place, the blue
-// screen's loading bar, and each screen settling in. GSAP is loaded as a plain script
+// Motion: GSAP does the "signal tuning in" moments — text scrambling into place and the blue
+// screen's loading bar; the screen change is a CSS freeze-and-glitch (switchGlitch). GSAP is loaded as a plain script
 // (window.gsap). If it's missing, every function here does nothing and the app still works,
 // the same way a missing Animator leaves a GameObject usable.
 // Motion personality: tape mechanics — short, decisive, no bounce (motion-design: "Corporate"
@@ -57,12 +57,37 @@ export function loadBar(barEl, seconds) {
   return tl;
 }
 
-// Screen change: a quick vertical squash and brightness pop, like a CRT switching inputs.
-export function switchIn(section) {
-  if (!enabled()) return null;
-  return gsap.fromTo(section,
-    { scaleY: 0.96, filter: 'brightness(1.6)', opacity: 0.6 },
-    { scaleY: 1, filter: 'brightness(1)', opacity: 1, duration: 0.22, ease: 'power3.out', clearProps: 'transform,filter,opacity' });
+// Screen change, the way a tape player cuts (learner request: "glitch and a short freeze, not a
+// squeeze"): the old picture holds still for a moment, then tears into shifted bands with a red/blue
+// split while the new screen shows through, and the new screen jitters once as it locks on.
+// The frozen picture is a copy of the old screen that takes no clicks, so the new screen's buttons
+// work right away. Styled in css/vhs.css. With reduced motion the screen just cuts.
+const FREEZE_MS = 340;
+export function switchGlitch(fromSection, toSection) {
+  if (reduced() || !fromSection || fromSection === toSection) return null;
+  const host = fromSection.parentElement;
+  host.querySelector(':scope > .freeze')?.remove();
+  const still = fromSection.cloneNode(true);
+  // Typed text isn't part of the HTML, so copy it, or the frozen form would look empty.
+  const live = fromSection.querySelectorAll('input, textarea');
+  still.querySelectorAll('input, textarea').forEach((el, i) => { el.value = live[i].value; });
+  still.removeAttribute('data-screen');
+  still.removeAttribute('aria-label');
+  still.hidden = false;
+  const frame = document.createElement('div');
+  frame.className = `freeze${fromSection.classList.contains('screen--blue') ? ' freeze--blue' : ''}`;
+  frame.setAttribute('aria-hidden', 'true');
+  frame.inert = true;
+  frame.append(still);
+  host.append(frame);
+  toSection.classList.remove('lock-on');
+  void toSection.offsetWidth; // restart the animation if the same screen comes back quickly
+  toSection.classList.add('lock-on');
+  // Cleared when the animation ends (a timer as a backstop, in case it never runs).
+  const done = () => { frame.remove(); toSection.classList.remove('lock-on'); };
+  frame.addEventListener('animationend', done, { once: true });
+  setTimeout(done, FREEZE_MS + 1500);
+  return frame;
 }
 
 // The timer gets a small pulse when it tips into overtime, then stays still.

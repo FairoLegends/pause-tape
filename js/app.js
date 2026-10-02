@@ -8,7 +8,7 @@ import { renderShelf } from './shelf.js';
 import { initRecord } from './record.js';
 import { initPlayback, PACE } from './playback.js';
 import { startCrt } from './crt.js';
-import { switchIn } from './motion.js';
+import { switchGlitch } from './motion.js';
 import { downloadIcs } from './ics.js';
 
 // --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
@@ -61,6 +61,7 @@ function show(name) {
   // In the room: the blue screen is up and the replay begins, so the camera eases into the TV.
   if (room && name === 'playback') room.loadingDone();
   hooks[current]?.leave();
+  const from = screens[current];
   clearTimeout(backOnItTimer);
   if (name !== 'blue' && name !== 'playback') playback.stop();
   for (const [key, section] of Object.entries(screens)) section.hidden = key !== name;
@@ -70,7 +71,7 @@ function show(name) {
   current = name;
   if (name === 'shelf') drawShelf();
   hooks[name]?.enter();
-  if (name !== 'blue') switchIn(screens[name]);
+  switchGlitch(from, screens[name]);
 }
 
 // Tape states are worked out from today's date on every draw, so a locked tape
