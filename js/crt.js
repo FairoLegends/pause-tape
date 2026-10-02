@@ -127,8 +127,10 @@ export async function startCrt(screenEl, { getVhs, reducedMotion }) {
   quad.frustumCulled = false;
   scene.add(quad);
 
+  // The screen's own layout size, not its size on screen: in the room the 3D camera scales it,
+  // and the shader should keep the same scanline pitch whatever the zoom.
   function resize() {
-    const r = screenEl.getBoundingClientRect();
+    const r = { width: screenEl.clientWidth, height: screenEl.clientHeight };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     renderer.setPixelRatio(dpr);
     renderer.setSize(Math.max(1, Math.round(r.width)), Math.max(1, Math.round(r.height)), false);

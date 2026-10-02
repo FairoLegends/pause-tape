@@ -47,7 +47,7 @@ export function initRecord(section, { onSave, onBack }) {
     const startedAt = Date.now();
     tick(startedAt);
     clockTimer = setInterval(() => tick(startedAt), 1000);
-    form.elements.project.focus();
+    form.elements.project.focus({ preventScroll: true }); // the screen is already in view; in the room, scrolling would shift the 3D layer
   }
 
   function leave() {

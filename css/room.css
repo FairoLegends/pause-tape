@@ -1,0 +1,261 @@
+/* The room around the TV (spec.md > Decisions; approved mockup: devpost/room-mockup.html).
+   Only active with html.has-room, which js/app.js sets once the 3D room has started. Without it
+   (no WebGL, a phone, or the room failed to load) none of this applies and the app is the flat TV. */
+
+/* ── Layers: the 3D room fills the window ────────────────────── */
+
+.room-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #05070c;
+}
+
+.has-room body {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* The flat TV frame is not used with the room: the 3D TV is the frame. */
+.has-room main.tv {
+  display: none;
+}
+
+/* The HTML layer (the app screen) sits under the WebGL canvas. The canvas is see-through at the
+   TV glass, so the app shows there, and it takes no clicks, so the app's buttons get them. */
+.room-css {
+  position: absolute !important;
+  inset: 0;
+}
+
+.room-gl {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* The app screen on the glass: a fixed 880 x 660 CSS-pixel screen (4:3) that the 3D layer scales.
+   Its own look (rounded glass, inner glow, sections, VHS layer) comes from css/base.css. */
+.room-screen {
+  width: 880px;
+  height: 660px;
+}
+
+.room-screen > .tv__screen {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 18px / 22px;
+}
+
+/* In the room the app is a picture: no hover effects or text cursor until the camera is in. */
+.room-screen [inert] {
+  user-select: none;
+}
+
+/* ── CRT curve on the live app screen (learner choice: "1 dan 2") ─ */
+
+/* 1. Laptops and desktops: a thin barrel bend from an SVG displacement filter. The form is still
+      the real form: it takes clicks and typing; near the edges the picture sits a few pixels
+      inward from where the click lands, so the bend is kept small. */
+.crt-bend .room-screen > .tv__screen {
+  filter: url(#crt-bend);
+}
+
+/* 2. Everywhere else (and on top of 1): the tube's look without moving any pixels: darker,
+      rounded corners and a curved glass glare. */
+.room-screen > .tv__screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 120% 95% at 30% 12%, rgba(255, 255, 255, 0.07) 0%, transparent 42%),
+    radial-gradient(ellipse at 50% 50%, transparent 62%, rgba(0, 0, 0, 0.55) 100%);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.7);
+}
+
+/* ── Room controls: the time panel (top right) and the hint (bottom) ── */
+
+.room-ui {
+  font-family: var(--font-osd);
+}
+
+.room-panel {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  width: min(280px, calc(100vw - 28px));
+  padding: 8px 12px;
+  border: 1px solid rgba(217, 222, 232, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 7, 12, 0.78);
+  backdrop-filter: blur(6px);
+  font-size: 18px;
+  line-height: 1.2;
+  transition: opacity 0.3s;
+}
+
+.room-panel h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+}
+
+.room-panel .times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.room-panel button,
+.photo-panel button {
+  padding: 1px 9px;
+  border: 1px solid rgba(217, 222, 232, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.room-panel .toggle {
+  float: right;
+}
+
+.room-panel button[aria-pressed='true'] {
+  border-color: var(--ready);
+  color: var(--ready);
+}
+
+.room-panel.is-hidden {
+  width: auto;
+}
+
+.room-panel.is-hidden > :not(.toggle) {
+  display: none;
+}
+
+/* With the camera in the TV the panel fades out, so it never covers the app. */
+.zoomed .room-panel {
+  opacity: 0;
+}
+
+.zoomed .room-panel:hover,
+.zoomed .room-panel:focus-within {
+  opacity: 1;
+}
+
+.hint {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  padding: 2px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(5, 7, 12, 0.7);
+  color: rgba(217, 222, 232, 0.8);
+  font: inherit;
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  white-space: nowrap; /* one line, also on a small window */
+  pointer-events: none;
+}
+
+.hint.is-button {
+  border: 1px solid rgba(98, 255, 143, 0.6);
+  color: var(--ready);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* With the app full screen in the TV, the hint sits in the dark band under the glass. */
+.room-live .hint {
+  bottom: 6px;
+  font-size: 18px;
+}
+
+/* ── PHOTO panel: the player zooms and moves their own picture in the frame ── */
+
+.photo-panel {
+  position: fixed;
+  left: 14px;
+  bottom: 56px;
+  z-index: 6;
+  width: 230px;
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(217, 222, 232, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 7, 12, 0.86);
+  backdrop-filter: blur(6px);
+  font-size: 18px;
+}
+
+.photo-panel h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+}
+
+.photo-panel canvas {
+  display: block;
+  width: 153px; /* the frame's shape: 0.13 x 0.17 m */
+  height: 200px;
+  margin: 0 auto 8px;
+  border: 6px solid #2b2018;
+  border-radius: 2px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.photo-panel canvas:active {
+  cursor: grabbing;
+}
+
+.photo-panel label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(217, 222, 232, 0.8);
+}
+
+.photo-panel input[type='range'] {
+  flex: 1;
+  accent-color: var(--ready);
+}
+
+.photo-panel p {
+  margin: 4px 0 6px;
+  color: rgba(217, 222, 232, 0.6);
+  font-size: 16px;
+}
+
+.photo-panel .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.photo-panel button[data-photo-done] {
+  border-color: var(--ready);
+  color: var(--ready);
+}
+
+/* Used by the automated checks so the overlay doesn't tint brightness numbers. */
+.clean .room-panel,
+.clean .photo-panel,
+.clean .hint {
+  visibility: hidden;
+}

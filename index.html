@@ -9,6 +9,7 @@
   <link rel="preload" href="assets/fonts/VT323-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/vhs.css">
+  <link rel="stylesheet" href="css/room.css">
   <!-- GSAP (standard no-charge license, notices kept in the files) for text and screen motion -->
   <script src="assets/vendor/gsap.min.js"></script>
   <script src="assets/vendor/ScrambleTextPlugin.min.js"></script>
@@ -158,5 +159,46 @@
       <div class="vhs" aria-hidden="true"></div>
     </div>
   </main>
+
+  <!-- The room around the TV (prd.md > The room around the TV). js/room.js moves the screen above
+       onto the 3D TV's glass and shows these controls; without WebGL they stay hidden. -->
+  <div class="room-stage" data-room-stage hidden></div>
+  <div class="room-ui" data-room-ui hidden>
+    <aside class="room-panel is-hidden" data-panel aria-label="Room settings">
+      <button class="toggle" type="button" data-toggle>SHOW</button>
+      <h2>ROOM</h2>
+      <div class="times" role="group" aria-label="Time of day">
+        <button type="button" data-time="auto">AUTO</button>
+        <button type="button" data-time="morning">MORNING</button>
+        <button type="button" data-time="day">DAY</button>
+        <button type="button" data-time="afternoon">AFTERNOON</button>
+        <button type="button" data-time="night">NIGHT</button>
+      </div>
+      <div class="times"><button type="button" data-photo-adjust hidden>ADJUST PHOTO</button></div>
+    </aside>
+    <section class="photo-panel" data-photo-panel hidden aria-label="Photo in the frame">
+      <h2>PHOTO</h2>
+      <canvas width="306" height="400" data-photo-preview aria-label="Drag to move the photo, scroll to zoom"></canvas>
+      <label>ZOOM <input type="range" min="1" max="3" step="0.01" value="1" data-photo-zoom aria-label="Zoom"></label>
+      <p>Drag the picture to move it. Scroll to zoom.</p>
+      <div class="row">
+        <button type="button" data-photo-change>CHANGE</button>
+        <button type="button" data-photo-reset>RESET</button>
+        <button type="button" data-photo-remove>REMOVE</button>
+        <button type="button" data-photo-done>DONE</button>
+      </div>
+    </section>
+    <input type="file" accept="image/*" hidden data-photo-input aria-label="Choose a photo for the frame">
+    <button class="hint" type="button" data-hint>VCR · CURTAIN · LAMP · PHOTO</button>
+  </div>
+
+  <!-- The CRT curve for the app screen in the room (js/room.js fills in the map). -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+    <filter id="crt-bend" x="0" y="0" width="100%" height="100%" filterUnits="objectBoundingBox"
+      primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feImage x="0" y="0" width="880" height="660" preserveAspectRatio="none" result="map"/>
+      <feDisplacementMap in="SourceGraphic" in2="map" scale="0" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </svg>
 </body>
 </html>

@@ -23,6 +23,7 @@ let current = null;
 let earlyTape = null;
 let backOnItTimer = null;
 let savedTape = null;
+let room = null; // the 3D room's controls, once it has started (see startRoomIfPossible)
 
 const record = initRecord(screens.record, {
   onSave(tape) {
@@ -57,6 +58,8 @@ const playback = initPlayback(screens, {
 const hooks = { record };
 
 function show(name) {
+  // In the room: the blue screen is up and the replay begins, so the camera eases into the TV.
+  if (room && name === 'playback') room.loadingDone();
   hooks[current]?.leave();
   clearTimeout(backOnItTimer);
   if (name !== 'blue' && name !== 'playback') playback.stop();
@@ -81,12 +84,18 @@ function drawShelf() {
   });
 }
 
+// In the room a tape goes into the VCR first; the app's playback starts once it is in.
+function play(tape, mode) {
+  const start = () => playback.startPlayback(tape, mode);
+  if (room) room.playTape(tape.project, start); else start();
+}
+
 // READY plays, locked asks first, completed replays (spec.md > Tape Shelf).
 function selectTape(tape, state) {
   if (state === 'ready') {
-    playback.startPlayback(tape, 'return');
+    play(tape, 'return');
   } else if (state === 'completed') {
-    playback.startPlayback(tape, 'replay');
+    play(tape, 'replay');
   } else {
     earlyTape = tape;
     // Two fixed lines, so the date never breaks in the middle.
@@ -107,7 +116,7 @@ document.querySelector('[data-action="add-calendar"]').addEventListener('click',
   note.textContent = `SAVED ${name.toUpperCase()}`;
   note.hidden = false;
 });
-document.querySelector('[data-action="early-play"]').addEventListener('click', () => playback.startPlayback(earlyTape, 'return'));
+document.querySelector('[data-action="early-play"]').addEventListener('click', () => play(earlyTape, 'return'));
 document.querySelector('[data-action="early-cancel"]').addEventListener('click', () => show('shelf'));
 // BACK ON IT returns by itself after a few seconds, or right away when tapped.
 screens.backonit.addEventListener('click', () => show('shelf'));
@@ -120,3 +129,31 @@ startCrt(document.querySelector('.tv__screen'), {
 });
 
 show('shelf');
+
+// The room around the TV (prd.md > The room around the TV): a laptop or desktop window with WebGL.
+// On a phone, or if anything fails, the app stays the flat TV above, which works on its own.
+async function startRoomIfPossible() {
+  const probe = document.createElement('canvas');
+  const gl = probe.getContext('webgl2') || probe.getContext('webgl');
+  if (!gl || window.innerWidth < 700 || new URLSearchParams(location.search).has('flat')) return;
+  try {
+    const mod = await import('./room.js');
+    // In the room, the blue loading screen runs about 3 s and the camera eases in when it ends
+    // (learner request for the VHS mode); the flat TV keeps its shorter 1.2 s.
+    PACE.blueMs = 3000;
+    room = mod.startRoom({ onLeave: () => show('shelf') });
+    mod.setupCrtBend();
+    document.documentElement.classList.add('has-room');
+  } catch (err) {
+    // Put the screen back in the flat TV if the room had already taken it.
+    const tvEl = document.querySelector('main.tv');
+    const screenEl = document.querySelector('.tv__screen');
+    if (screenEl && !tvEl.contains(screenEl)) tvEl.append(screenEl);
+    document.documentElement.classList.remove('has-room');
+    document.querySelector('[data-room-stage]').hidden = true;
+    document.querySelector('[data-room-ui]').hidden = true;
+    room = null;
+    console.warn('Room not started, keeping the flat TV:', err);
+  }
+}
+startRoomIfPossible();
