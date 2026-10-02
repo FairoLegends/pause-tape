@@ -244,6 +244,9 @@ DTSTART;VALUE=DATE:20270110
 DTEND;VALUE=DATE:20270111
 SUMMARY:▶ NO SIGNAL — tape ready
 DESCRIPTION:First step: <the tape's first step>
+TRANSP:TRANSPARENT
+X-MICROSOFT-CDO-ALLDAYEVENT:TRUE
+X-MICROSOFT-CDO-BUSYSTATUS:FREE
 BEGIN:VALARM
 ACTION:DISPLAY
 DESCRIPTION:<the tape's first step>
@@ -259,6 +262,9 @@ END:VCALENDAR
   - Opening the file in Outlook on the learner's laptop (for the demo; confirmed by the learner that `.ics` opens there). Verify that the all-day event, the description, and the alarm appear.
   - The learner's Android phone with Google Calendar or another calendar app. Google Calendar is known to often ignore `VALARM` from imported files and use its own default reminder, and Android may not open `.ics` directly.
   - Any problem found is written in `README.md > Known limitations`, not worked around with extra features.
+- **Device test results (learner, 2 Oct 2026):**
+  - New Outlook for Windows: imports through Add calendar > Upload from file; title, note and date are right. Without the two `X-MICROSOFT-CDO-*` lines it showed the event as 07:00 to 07:00 the next day (shifted by the UTC+7 offset); with them it shows "All day" on its own day. These are two standard header lines in the same file, not an extra feature. Reminder: not confirmed yet.
+  - Google Calendar on Android: opens the file sent over WhatsApp, right all-day date, title and note. It replaces the 08:00 alarm with its own default (17:00 the day before) and shows the event as busy. README limitation.
 
 ### The VCR font file
 Stored in `assets/fonts/` with its license. Loaded with `@font-face` in `base.css` from a relative path. No Google Fonts or CDN requests, so the app works offline once loaded.

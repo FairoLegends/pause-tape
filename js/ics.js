@@ -70,6 +70,10 @@ export function buildIcs(tape, now = new Date()) {
     `SUMMARY:${escapeText(`▶ ${tape.project} — tape ready`)}`,
     `DESCRIPTION:${escapeText(`First step: ${tape.firstStep}`)}`,
     'TRANSP:TRANSPARENT',
+    // The new Outlook for Windows showed a date-only event as 07:00 to 07:00 the next day (shifted by
+    // the UTC offset) until these two Microsoft lines said "all day" and "free" (learner's test, 2 Oct 2026).
+    'X-MICROSOFT-CDO-ALLDAYEVENT:TRUE',
+    'X-MICROSOFT-CDO-BUSYSTATUS:FREE',
     'BEGIN:VALARM',
     'ACTION:DISPLAY',
     `DESCRIPTION:${escapeText(tape.firstStep)}`,
