@@ -110,7 +110,15 @@
       font: inherit;
       font-size: 20px;
       letter-spacing: 0.06em;
+      white-space: nowrap; /* one line, also on a phone */
       pointer-events: none;
+    }
+
+    @media (max-width: 520px) {
+      .hint {
+        font-size: 16px;
+        letter-spacing: 0.02em;
+      }
     }
 
     .hint.is-button {
@@ -120,8 +128,90 @@
       cursor: pointer;
     }
 
+    /* PHOTO panel: the player zooms and moves their own picture inside the frame. */
+    .photo-panel {
+      position: fixed;
+      left: 14px;
+      bottom: 56px;
+      z-index: 6;
+      width: 230px;
+      padding: 10px 12px 12px;
+      border: 1px solid rgba(217, 222, 232, 0.2);
+      border-radius: 8px;
+      background: rgba(5, 7, 12, 0.86);
+      backdrop-filter: blur(6px);
+      font-size: 18px;
+    }
+
+    .photo-panel[hidden] {
+      display: none;
+    }
+
+    .photo-panel h2 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      font-weight: normal;
+      letter-spacing: 0.08em;
+    }
+
+    .photo-panel canvas {
+      display: block;
+      width: 153px; /* the frame's shape: 0.13 x 0.17 m */
+      height: 200px;
+      margin: 0 auto 8px;
+      border: 6px solid #2b2018;
+      border-radius: 2px;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .photo-panel canvas:active {
+      cursor: grabbing;
+    }
+
+    .photo-panel label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: rgba(217, 222, 232, 0.8);
+    }
+
+    .photo-panel input[type='range'] {
+      flex: 1;
+      accent-color: #62ff8f;
+    }
+
+    .photo-panel p {
+      margin: 4px 0 6px;
+      color: rgba(217, 222, 232, 0.6);
+      font-size: 16px;
+    }
+
+    .photo-panel .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .photo-panel button {
+      padding: 1px 8px;
+      border: 1px solid rgba(217, 222, 232, 0.3);
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+    }
+
+    .photo-panel button[data-photo-done] {
+      border-color: #62ff8f;
+      color: #62ff8f;
+    }
+
     /* Used by the automated check so the overlay doesn't tint its brightness numbers. */
     .clean .panel,
+    .clean .photo-panel,
     .clean .hint {
       visibility: hidden;
     }
@@ -149,8 +239,9 @@
     <h1>ROOM MOCKUP</h1>
     <p>Move the mouse: the camera turns a little.</p>
     <p>Click the VCR: the TV goes from standby to the shelf and the camera moves in.</p>
-    <p>Click the window or curtain to close or open it. Click the lamp to switch it on or off.</p>
-    <p>Click the photo frame to put your own picture in it (cropped to fit, kept only in this browser).</p>
+    <p>On the shelf, click a READY tape: it goes into the VCR, the TV loads, and the camera moves in for the replay.</p>
+    <p>Click the window or curtain to close or open it. Pull the lamp's cord down (or click the lamp) to switch it.</p>
+    <p>Click the photo frame to put your own picture in it, then zoom and move it (kept only in this browser).</p>
     <p>The window pictures are AI-generated in a cartoon style (Seedream 5.0 pro).</p>
     <div class="times" role="group" aria-label="Time of day">
       <button type="button" data-time="auto">AUTO</button>
@@ -159,10 +250,22 @@
       <button type="button" data-time="afternoon">AFTERNOON</button>
       <button type="button" data-time="night">NIGHT</button>
     </div>
-    <div class="times"><button type="button" data-photo-remove hidden>REMOVE PHOTO</button></div>
+    <div class="times"><button type="button" data-photo-adjust hidden>ADJUST PHOTO</button></div>
     <p class="clock" data-clock></p>
     <p>URL: ?time=morning|day|afternoon|night (pagi|siang|sore|malam also work)</p>
   </aside>
+  <section class="photo-panel" data-photo-panel hidden aria-label="Photo in the frame">
+    <h2>PHOTO</h2>
+    <canvas width="306" height="400" data-photo-preview aria-label="Drag to move the photo, scroll to zoom"></canvas>
+    <label>ZOOM <input type="range" min="1" max="3" step="0.01" value="1" data-photo-zoom aria-label="Zoom"></label>
+    <p>Drag the picture to move it. Scroll to zoom.</p>
+    <div class="row">
+      <button type="button" data-photo-change>CHANGE</button>
+      <button type="button" data-photo-reset>RESET</button>
+      <button type="button" data-photo-remove>REMOVE</button>
+      <button type="button" data-photo-done>DONE</button>
+    </div>
+  </section>
   <input type="file" accept="image/*" hidden data-photo-input aria-label="Choose a photo for the frame">
   <button class="hint" type="button" data-hint>VCR · CURTAIN · LAMP · PHOTO</button>
 

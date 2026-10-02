@@ -34,7 +34,8 @@ const _ndc = new THREE.Vector2();
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // Layout in metres: x to the right, y up, z toward the viewer. The back wall is at WALL_Z.
-// Left to right along the back wall: bookshelf (sofa in front of it), window, TV cabinet, plant.
+// Left to right along the back wall: bookshelf, window, TV cabinet, plant. In the room: a sofa on the left
+// and an armchair on the right, both turned toward the TV, and a low table with books and papers between them.
 const WALL_Z = -2.0;
 const WIN = { x: -0.85, y: 1.9, w: 1.0, h: 0.95 }; // the sill plate (y 1.38..1.43) clears the TV top (~1.29)
 const fx = WIN.x;
@@ -42,9 +43,13 @@ const fy = WIN.y;
 
 // Camera poses: the whole room, the room on a phone, and close to the TV once the shelf is open.
 const POSES = {
-  desktop: { pos: V(-0.1, 1.45, 2.4), look: V(-0.1, 1.17, -1.4) },
-  portrait: { pos: V(0.0, 1.25, 2.9), look: V(0.0, 1.3, -1.4) },
-  tv: { pos: V(-0.3, 0.95, 0.0), look: V(-0.3, 0.93, -1.12) },
+  desktop: { pos: V(-0.1, 1.5, 2.6), look: V(-0.1, 1.1, -1.4) },
+  portrait: { pos: V(-0.2, 1.25, 2.9), look: V(-0.2, 1.3, -1.4) }, // nudged left so the window, the curtain and the TV are all in frame
+  tv: { pos: V(-0.3, 0.95, 0.0), look: V(-0.3, 0.93, -1.12), close: 1 },
+  // Pulled back a little, so the VCR shows while the tape goes in and the TV loads.
+  insert: { pos: V(0.3, 1.08, 0.8), look: V(0.05, 0.78, -1.35), close: 0.7 },
+  // Into the TV: the screen fills the view for the VHS replay.
+  play: { pos: V(-0.3, 0.95, -0.5), look: V(-0.3, 0.95, -1.12), close: 1 },
 };
 let wide = POSES.desktop;
 
@@ -101,11 +106,15 @@ function makeClickable(root, name, onClick) {
   root.userData.name = name;
   root.userData.click = onClick;
 }
+let lastHit = null; // the raycast hit behind the last answer (its uv says where on the TV screen)
 function clickableAt(ndcX, ndcY) {
   raycaster.setFromCamera(_ndc.set(ndcX, ndcY), camera);
   const hits = raycaster.intersectObjects(scene.children, true);
   if (!hits.length) return null;
-  for (let o = hits[0].object; o; o = o.parent) if (o.userData.click) return o;
+  lastHit = hits[0];
+  for (let o = hits[0].object; o; o = o.parent) {
+    if (o.userData.click) return !o.userData.when || o.userData.when() ? o : null;
+  }
   return null;
 }
 const hitBox = (w, h, d) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ visible: false }));
@@ -284,16 +293,15 @@ const curtainTex = canvasTexture(256, 512, (g, w, h) => {
   g.fillRect(0, h - 26, w, 26);
 });
 const curtainMat = std(0xffffff, 0.95, 0, { map: curtainTex.texture, side: THREE.DoubleSide, emissive: 0x000000 });
+// The fabric is re-shaped every frame (like a cloth driven by a script): the folds bunch up and
+// deepen when it is open and flatten when it is closed, the hem trails behind and swings back
+// when it moves, and it breathes a little. The top edge stays on the rod.
+const CURTAIN_NU = 64;
+const CURTAIN_NV = 16;
 function curtainPanel(side) { // side -1 = left panel (anchored at the rod's left end), +1 = right panel
-  const geo = new THREE.PlaneGeometry(1, CURTAIN_TOP - CURTAIN_BOTTOM, 56, 1);
-  geo.translate(side < 0 ? 0.5 : -0.5, 0, 0); // the anchored edge sits at x = 0
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) { // pleats: a sine wave across the width
-    const u = side < 0 ? pos.getX(i) : -pos.getX(i); // 0 at the rod end, 1 at the free edge
-    pos.setZ(i, 0.045 * Math.sin(u * Math.PI * 2 * 7));
-  }
-  geo.computeVertexNormals();
+  const geo = new THREE.PlaneGeometry(1, CURTAIN_TOP - CURTAIN_BOTTOM, CURTAIN_NU, CURTAIN_NV);
   const m = new THREE.Mesh(geo, curtainMat);
+  m.userData.side = side;
   m.position.set(side < 0 ? ROD.x0 : ROD.x1, (CURTAIN_TOP + CURTAIN_BOTTOM) / 2, CURTAIN_Z);
   m.castShadow = true;
   m.receiveShadow = true;
@@ -302,6 +310,30 @@ function curtainPanel(side) { // side -1 = left panel (anchored at the rod's lef
 }
 const curtainL = curtainPanel(-1);
 const curtainR = curtainPanel(1);
+const cloth = { lag: 0, lagVel: 0, prevW: PANEL_OPEN, vel: 0 };
+function shapeCurtain(m, pw, t, still, hoverAmt) {
+  const side = m.userData.side;
+  const pos = m.geometry.attributes.position;
+  const H = CURTAIN_TOP - CURTAIN_BOTTOM;
+  const bunch = THREE.MathUtils.clamp(1 - (pw - PANEL_OPEN) / (PANEL_CLOSED - PANEL_OPEN), 0, 1); // 1 = open
+  const amp = 0.02 + 0.042 * bunch;
+  let i = 0;
+  for (let iv = 0; iv <= CURTAIN_NV; iv++) {
+    const v = iv / CURTAIN_NV; // 0 at the rod, 1 at the hem
+    for (let iu = 0; iu <= CURTAIN_NU; iu++, i++) {
+      const u = iu / CURTAIN_NU; // 0 at the rod end, 1 at the free edge
+      const x = u * pw + cloth.lag * u * v * v; // the lower, freer part trails behind
+      const fold = Math.sin(u * Math.PI * 2 * 7) * (0.8 + 0.2 * Math.sin(u * 23 + side));
+      const flare = 1 + 0.35 * v * v; // the folds open up toward the hem
+      const breathe = still ? 0 : (0.006 + 0.008 * hoverAmt) * v * Math.sin(t * 1.3 + u * 6 + v * 2 + side * 2);
+      pos.setXYZ(i, side < 0 ? x : -x, H / 2 - v * H, amp * fold * flare * (1 - 0.1 * v) + breathe);
+    }
+  }
+  pos.needsUpdate = true;
+  m.geometry.computeVertexNormals();
+  m.geometry.computeBoundingSphere();
+  m.geometry.boundingBox = null; // recomputed when a check measures it
+}
 const brass = std(0xb8964a, 0.35, 0.8);
 box(ROD.x1 - ROD.x0 + 0.1, 0.025, 0.025, brass, (ROD.x0 + ROD.x1) / 2, ROD.y, CURTAIN_Z, windowGroup);
 for (const ex of [ROD.x0 - 0.06, ROD.x1 + 0.06]) {
@@ -315,6 +347,7 @@ let curtainAmount = 1; // what is on screen (eased)
 let curtainOpen = 1; // the same, smoothed again for the look
 const toggleCurtain = () => { curtainTarget = curtainTarget > 0.5 ? 0 : 1; };
 makeClickable(windowGroup, 'window', toggleCurtain);
+windowGroup.userData.when = () => tvMode === 'standby';
 
 // ── Furniture: TV cabinet (centre), bookshelf and sofa (left), lamp (right) ──
 
@@ -361,10 +394,10 @@ const tvTex = canvasTexture(640, 480, () => {});
 const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.48), new THREE.MeshBasicMaterial({ map: tvTex.texture, toneMapped: false }));
 screen.position.set(0, 0.35, 0.277);
 tv.add(screen);
-const tvSheen = new THREE.Mesh(
+const tvSheen = noPick(new THREE.Mesh(
   new THREE.PlaneGeometry(0.64, 0.48),
   new THREE.MeshBasicMaterial({ map: sheen.texture, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false }),
-);
+));
 tvSheen.position.set(0, 0.35, 0.2785);
 tv.add(tvSheen);
 for (const ky of [0.47, 0.4]) { // two knobs
@@ -390,7 +423,14 @@ vcr.position.set(0.52, VCR_Y, 0.02);
 cab.add(vcr);
 const vcrShell = box(0.5, 0.1, 0.36, std(0x2b2d33, 0.4, 0.25), 0, 0.05, 0, vcr, 0.012);
 box(0.3, 0.025, 0.01, std(0x0c0d10, 0.3), -0.06, 0.06, 0.182, vcr); // tape slot
-box(0.19, 0.02, 0.1, std(0x111111, 0.6), -0.06, 0.06, 0.2, vcr); // a tape half inserted hints "play"
+// The cassette that slides into the slot when a tape is played (hidden until then).
+const cassette = new THREE.Group();
+cassette.visible = false;
+box(0.188, 0.024, 0.104, std(0x141416, 0.55), 0, 0, 0, cassette, 0.004);
+box(0.13, 0.002, 0.05, std(0xd3cdbd, 0.8), 0, 0.0125, 0.012, cassette); // label
+box(0.11, 0.0025, 0.006, std(0x62ff8f, 0.6), 0, 0.0128, -0.016, cassette); // the READY stripe
+cassette.position.set(-0.06, 0.06, 0.42);
+vcr.add(cassette);
 for (const bx of [-0.2, -0.15, -0.1]) box(0.03, 0.012, 0.012, std(0x3a3c42, 0.4, 0.3), bx, 0.025, 0.183, vcr);
 const vcrDisplay = canvasTexture(256, 64, () => {});
 const vcrScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.03), new THREE.MeshBasicMaterial({ map: vcrDisplay.texture, toneMapped: false }));
@@ -432,60 +472,161 @@ pic.position.set(0, 0.1, 0.0085);
 frame.add(pic);
 box(0.02, 0.18, 0.02, std(0x2b2018, 0.5), 0, 0.08, -0.05, frame).rotation.x = -0.35; // easel leg
 
-// Photo slot: "YOUR PHOTO" until the player picks a picture of their own. The picture is cropped to
-// fill the frame, shrunk, and kept only in this browser (localStorage); it is never uploaded.
-const PHOTO_KEY = 'pausetape.photo.v1';
+// Photo slot: "YOUR PHOTO" until the player picks a picture of their own. The picture is shrunk,
+// kept only in this browser (localStorage), never uploaded, and the player can zoom and move it
+// inside the frame in the PHOTO panel. The frame shows it through a canvas texture (like a
+// RenderTexture the script draws into).
+const PHOTO_KEY = 'pausetape.photo.v2'; // { src, zoom, x, y }
+const OLD_PHOTO_KEY = 'pausetape.photo.v1';
+const FW = 384;
+const FH = 502; // the picture area is 0.13 x 0.17 m
+const photoPanel = document.querySelector('[data-photo-panel]');
 const photoInput = document.querySelector('[data-photo-input]');
-const photoRemove = document.querySelector('[data-photo-remove]');
+const photoPreview = document.querySelector('[data-photo-preview]');
+const photoZoom = document.querySelector('[data-photo-zoom]');
+const photoAdjust = document.querySelector('[data-photo-adjust]');
 const emptyPhoto = pic.material.map;
-let hasPhoto = false;
-let photoSize = { w: 0, h: 0 };
-function showPhoto(dataUrl) {
-  loader.load(dataUrl, (t) => {
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
-    pic.material.map = t;
-    pic.material.needsUpdate = true;
-    hasPhoto = true;
-    photoSize = { w: t.image.width, h: t.image.height };
-    photoRemove.hidden = false;
-  });
+const photoCanvas = document.createElement('canvas');
+photoCanvas.width = FW;
+photoCanvas.height = FH;
+const photoTex = new THREE.CanvasTexture(photoCanvas);
+photoTex.colorSpace = THREE.SRGBColorSpace;
+photoTex.anisotropy = 4;
+let photoImg = null;
+let photoSrc = '';
+const photoView = { zoom: 1, x: 0, y: 0 }; // x, y from -1 to 1: how far toward each edge the picture is moved
+const ZOOM_MAX = 3;
+
+function photoLayout(W, H) { // where the picture lands in a W x H frame ("cover", then zoom and move)
+  const iw = photoImg.width;
+  const ih = photoImg.height;
+  const sc = Math.max(W / iw, H / ih) * photoView.zoom;
+  const sw = iw * sc;
+  const sh = ih * sc;
+  const ox = (sw - W) / 2;
+  const oy = (sh - H) / 2;
+  return { sw, sh, ox, oy, dx: -ox * (1 + photoView.x), dy: -oy * (1 + photoView.y) };
+}
+function renderPhoto() {
+  if (!photoImg) return;
+  const g = photoCanvas.getContext('2d');
+  const L = photoLayout(FW, FH);
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, FW, FH);
+  g.drawImage(photoImg, L.dx, L.dy, L.sw, L.sh);
+  photoTex.needsUpdate = true;
+  const pg = photoPreview.getContext('2d');
+  const pw = photoPreview.width;
+  const ph = photoPreview.height;
+  const P2 = photoLayout(pw, ph);
+  pg.fillStyle = '#000';
+  pg.fillRect(0, 0, pw, ph);
+  pg.drawImage(photoImg, P2.dx, P2.dy, P2.sw, P2.sh);
+  photoZoom.value = String(photoView.zoom);
+}
+let saveTimer = 0;
+function savePhoto(now = false) {
+  clearTimeout(saveTimer);
+  const write = () => {
+    try { localStorage.setItem(PHOTO_KEY, JSON.stringify({ src: photoSrc, ...photoView })); } catch { /* blocked or full: it still shows for this visit */ }
+  };
+  if (now) write(); else saveTimer = setTimeout(write, 250);
+}
+async function showPhoto(src, view = { zoom: 1, x: 0, y: 0 }) {
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  photoImg = img;
+  photoSrc = src;
+  Object.assign(photoView, view);
+  renderPhoto();
+  pic.material.map = photoTex;
+  pic.material.needsUpdate = true;
+  photoAdjust.hidden = false;
 }
 function clearPhoto() {
+  photoImg = null;
+  photoSrc = '';
   pic.material.map = emptyPhoto;
   pic.material.needsUpdate = true;
-  hasPhoto = false;
-  photoRemove.hidden = true;
-  try { localStorage.removeItem(PHOTO_KEY); } catch { /* storage may be blocked */ }
+  photoAdjust.hidden = true;
+  closePhotoPanel();
+  try { localStorage.removeItem(PHOTO_KEY); localStorage.removeItem(OLD_PHOTO_KEY); } catch { /* ignore */ }
 }
-async function cropToFrame(file) {
+async function shrink(file) { // keep enough pixels to zoom in, but stay small in storage
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const W = 384;
-  const H = 502; // the picture area is 0.13 x 0.17 m
+  const sc = Math.min(1, 1200 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
-  c.width = W;
-  c.height = H;
-  const sc = Math.max(W / bmp.width, H / bmp.height); // "cover": fill the frame, crop the overflow
-  c.getContext('2d').drawImage(bmp, (W - bmp.width * sc) / 2, (H - bmp.height * sc) / 2, bmp.width * sc, bmp.height * sc);
+  c.width = Math.round(bmp.width * sc);
+  c.height = Math.round(bmp.height * sc);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close();
-  return c.toDataURL('image/jpeg', 0.85);
+  return c.toDataURL('image/jpeg', 0.86);
 }
+function openPhotoPanel() { photoPanel.hidden = false; }
+function closePhotoPanel() { photoPanel.hidden = true; savePhoto(true); }
+const clampView = () => {
+  photoView.zoom = THREE.MathUtils.clamp(photoView.zoom, 1, ZOOM_MAX);
+  photoView.x = THREE.MathUtils.clamp(photoView.x, -1, 1);
+  photoView.y = THREE.MathUtils.clamp(photoView.y, -1, 1);
+};
+
 photoInput.addEventListener('change', async () => {
   const file = photoInput.files[0];
   photoInput.value = ''; // so picking the same file again still fires
   if (!file) return;
   try {
-    const url = await cropToFrame(file);
-    showPhoto(url);
-    try { localStorage.setItem(PHOTO_KEY, url); } catch { /* blocked or full: it still shows for this visit */ }
+    await showPhoto(await shrink(file));
+    savePhoto(true);
+    openPhotoPanel();
   } catch { /* not a picture the browser can read: the frame stays as it was */ }
 });
-photoRemove.addEventListener('click', clearPhoto);
-try { const saved = localStorage.getItem(PHOTO_KEY); if (saved) showPhoto(saved); } catch { /* ignore */ }
+photoZoom.addEventListener('input', () => { photoView.zoom = Number(photoZoom.value); clampView(); renderPhoto(); savePhoto(); });
+photoPreview.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  photoView.zoom *= Math.exp(-e.deltaY * 0.0015);
+  clampView();
+  renderPhoto();
+  savePhoto();
+}, { passive: false });
+let photoDrag = null;
+photoPreview.addEventListener('pointerdown', (e) => {
+  if (!photoImg) return;
+  photoDrag = { x: e.clientX, y: e.clientY, vx: photoView.x, vy: photoView.y };
+  photoPreview.setPointerCapture(e.pointerId);
+});
+photoPreview.addEventListener('pointermove', (e) => {
+  if (!photoDrag) return;
+  const r = photoPreview.getBoundingClientRect();
+  const L = photoLayout(r.width, r.height);
+  // Dragging right shows more of the picture's left side, like sliding a print in a frame.
+  if (L.ox > 0) photoView.x = photoDrag.vx - (e.clientX - photoDrag.x) / L.ox;
+  if (L.oy > 0) photoView.y = photoDrag.vy - (e.clientY - photoDrag.y) / L.oy;
+  clampView();
+  renderPhoto();
+});
+const endPhotoDrag = () => { if (photoDrag) { photoDrag = null; savePhoto(); } };
+photoPreview.addEventListener('pointerup', endPhotoDrag);
+photoPreview.addEventListener('pointercancel', endPhotoDrag);
+photoPanel.addEventListener('click', (e) => {
+  if (e.target.closest('[data-photo-change]')) photoInput.click();
+  if (e.target.closest('[data-photo-reset]')) { Object.assign(photoView, { zoom: 1, x: 0, y: 0 }); renderPhoto(); savePhoto(true); }
+  if (e.target.closest('[data-photo-remove]')) clearPhoto();
+  if (e.target.closest('[data-photo-done]')) closePhotoPanel();
+});
+photoAdjust.addEventListener('click', openPhotoPanel);
+try {
+  const saved = JSON.parse(localStorage.getItem(PHOTO_KEY) ?? 'null');
+  const old = localStorage.getItem(OLD_PHOTO_KEY);
+  if (saved?.src) showPhoto(saved.src, { zoom: saved.zoom ?? 1, x: saved.x ?? 0, y: saved.y ?? 0 }).catch(() => {});
+  else if (old) showPhoto(old).then(() => { savePhoto(true); localStorage.removeItem(OLD_PHOTO_KEY); }).catch(() => {});
+} catch { /* ignore */ }
 const frameHit = hitBox(0.3, 0.32, 0.16);
 frameHit.position.set(0, 0.11, 0);
 frame.add(frameHit);
-makeClickable(frame, 'frame', () => photoInput.click());
+// With no photo yet a click opens the file picker; with one it opens the PHOTO panel.
+makeClickable(frame, 'frame', () => (photoImg ? openPhotoPanel() : photoInput.click()));
+frame.userData.when = () => tvMode === 'standby';
 
 // Table lamp at the right end of the cabinet: on in the evening and at night, and a click
 // switches it on or off.
@@ -515,7 +656,46 @@ lampHit.position.y = 0.3;
 lamp.add(lampBase, lampStem, lampShade, bulb, lampLight, lampGlowSprite, lampHit);
 let lampOverride = null; // null = follows the time of day; true/false = the player's choice
 const toggleLamp = () => { lampOverride = !(lampOverride === null ? lampState().auto > 0.5 : lampOverride); };
-makeClickable(lamp, 'lamp', toggleLamp);
+
+// Pull cord under the shade: drag the bead down and let go, or just click the lamp. The cord is a
+// spring (like a SpringJoint): it stretches while held, snaps back past its rest length, wobbles and
+// settles. Pulled far enough, it clicks the lamp on or off.
+const CORD_TOP = V(0.075, 0.37, 0.05); // lamp space, just inside the shade's rim
+const CORD_REST = 0.14;
+const CORD_MAX = 0.13; // extra length a pull can add
+const CORD_CLICK = 0.06;
+const cordMat = std(0xe8dcc0, 0.8);
+const cordLine = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 1, 6), cordMat);
+cordLine.geometry.translate(0, -0.5, 0); // hangs down from its top point
+const bead = new THREE.Mesh(new THREE.SphereGeometry(0.014, 12, 10), std(0xb8964a, 0.35, 0.8));
+const beadHit = hitBox(0.08, 0.1, 0.08);
+bead.add(beadHit);
+cordLine.castShadow = bead.castShadow = true;
+lamp.add(cordLine, bead);
+const cord = { ext: 0, vel: 0, swing: 0, swingVel: 0, held: false, startY: 0, clicked: false };
+function pullCord() { // a plain click: a short pull that is enough to click the lamp
+  cord.vel = 1.6;
+  cord.swingVel += 2.5;
+  toggleLamp();
+}
+makeClickable(lamp, 'lamp', pullCord);
+lamp.userData.when = () => tvMode === 'standby';
+function updateCord(dt) {
+  if (!cord.held) {
+    // spring back to rest, slightly under-damped so it bounces
+    cord.vel += (-cord.ext * 260 - cord.vel * 9) * dt;
+    cord.ext += cord.vel * dt;
+  }
+  cord.ext = THREE.MathUtils.clamp(cord.ext, -0.03, CORD_MAX);
+  cord.swing = THREE.MathUtils.clamp(cord.swing, -1.2, 1.2);
+  cord.swingVel += (-cord.swing * 40 - cord.swingVel * 2.2) * dt;
+  cord.swing += cord.swingVel * dt;
+  const len = CORD_REST + cord.ext;
+  cordLine.position.copy(CORD_TOP);
+  cordLine.scale.set(1, len, 1);
+  cordLine.rotation.z = cord.swing * 0.35;
+  bead.position.set(CORD_TOP.x + Math.sin(cord.swing * 0.35) * len, CORD_TOP.y - Math.cos(cord.swing * 0.35) * len - 0.012, CORD_TOP.z);
+}
 
 // Bookshelf against the back wall, left of the window: open shelves with books.
 function makeBookshelf() {
@@ -573,11 +753,16 @@ function makeBookshelf() {
 }
 const bookshelf = makeBookshelf();
 
-// Sofa in front of the bookshelf, facing the room. Rounded shapes keep it semi-cartoon.
+// Sofa on the left, out in the room and turned toward the TV, so the bookshelf stays free to reach
+// (a sofa pushed against a shelf blocks it). Rounded shapes keep it semi-cartoon.
+const TV_SPOT = V(-0.3, 0, -1.4); // where the seats look at
+// Turned most of the way toward the TV (a full turn would show the camera only their backs).
+function faceTv(g, amount = 0.6) { g.rotation.y = amount * Math.atan2(TV_SPOT.x - g.position.x, TV_SPOT.z - g.position.z); }
 function makeSofa() {
   const g = new THREE.Group();
   g.name = 'sofa';
-  g.position.set(-1.72, 0, -1.26);
+  g.position.set(-1.3, 0, -0.66); // floor left free between it and the shelf
+  faceTv(g);
   scene.add(g);
   const fabric = std(0x3e7c80, 0.92);
   const cushion = std(0x4a8c90, 0.92);
@@ -592,6 +777,69 @@ function makeSofa() {
   return g;
 }
 const sofa = makeSofa();
+
+// Armchair on the right, turned toward the TV as well.
+function makeArmchair() {
+  const g = new THREE.Group();
+  g.name = 'armchair';
+  g.position.set(1.4, 0, -0.98);
+  faceTv(g);
+  scene.add(g);
+  const fabric = std(0xc98a4b, 0.9);
+  const cushion = std(0xd99c5c, 0.9);
+  const leg = std(0x4a3222, 0.6);
+  for (const [lx, lz] of [[-0.25, -0.24], [0.25, -0.24], [-0.25, 0.24], [0.25, 0.24]]) box(0.045, 0.1, 0.045, leg, lx, 0.05, lz, g);
+  box(0.62, 0.2, 0.62, fabric, 0, 0.2, 0, g, 0.05); // seat base
+  box(0.62, 0.5, 0.16, fabric, 0, 0.55, -0.23, g, 0.06); // back
+  for (const ax of [-0.25, 0.25]) box(0.12, 0.36, 0.6, fabric, ax, 0.42, 0, g, 0.05); // arms
+  box(0.38, 0.12, 0.44, cushion, 0, 0.36, 0.06, g, 0.05); // seat cushion
+  box(0.36, 0.3, 0.1, cushion, 0, 0.56, -0.13, g, 0.05).rotation.x = -0.18; // back cushion
+  return g;
+}
+const armchair = makeArmchair();
+
+// A low table in the middle with stacks of books and loose papers.
+function makeTable() {
+  const g = new THREE.Group();
+  g.name = 'table';
+  g.position.set(-0.2, 0, -0.66);
+  g.rotation.y = 0.06;
+  scene.add(g);
+  const wood = std(0x9a6b42, 0.6);
+  box(0.95, 0.04, 0.5, wood, 0, 0.38, 0, g, 0.012); // top
+  box(0.86, 0.025, 0.42, std(0x7d5634, 0.7), 0, 0.12, 0, g, 0.008); // lower shelf
+  for (const [lx, lz] of [[-0.42, -0.2], [0.42, -0.2], [-0.42, 0.2], [0.42, 0.2]]) box(0.04, 0.38, 0.04, wood, lx, 0.19, lz, g, 0.008);
+  const r = rng(21);
+  const palette = [0xb9483c, 0x3f7f86, 0xe3d6b4, 0x2f4f7a, 0xd18b3a, 0x6a8f4e];
+  const stack = (x, z, n, rot, y = 0.4) => { // a stack of books, each a little turned; y = the surface
+
+    for (let i = 0; i < n; i++) {
+      const h = 0.025 + r() * 0.02;
+      const b = box(0.2 + r() * 0.06, h, 0.14 + r() * 0.04, std(palette[Math.floor(r() * palette.length)], 0.75), x, y + h / 2, z, g, 0.004);
+      b.rotation.y = rot + (r() - 0.5) * 0.35;
+      b.userData.kind = 'book';
+      y += h;
+    }
+  };
+  stack(-0.28, -0.04, 4, 0.1);
+  stack(0.3, 0.06, 2, -0.3);
+  const paper = std(0xf4f0e6, 0.95);
+  for (let i = 0; i < 4; i++) { // loose sheets, fanned out
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.002, 0.21), paper);
+    p.position.set(-0.02 + i * 0.025, 0.402 + i * 0.0025, 0.1 - i * 0.012);
+    p.rotation.y = -0.5 + i * 0.28;
+    p.castShadow = p.receiveShadow = true;
+    p.userData.kind = 'paper';
+    g.add(p);
+  }
+  const pen = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.12, 8), std(0x2f4f7a, 0.4));
+  pen.rotation.set(Math.PI / 2, 0, 0.7);
+  pen.position.set(0.05, 0.415, 0.12);
+  g.add(pen);
+  stack(0.18, 0.02, 3, 0.4, 0.1325); // and a few on the lower shelf
+  return g;
+}
+const table = makeTable();
 
 // A rug under the sofa and in front of the cabinet, so the floor isn't a bare plank field.
 const rugTex = canvasTexture(512, 320, (g, w, h) => {
@@ -617,16 +865,16 @@ const rugTex = canvasTexture(512, 320, (g, w, h) => {
     g.fill();
   }
 });
-const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.8), std(0xffffff, 1, 0, { map: rugTex.texture }));
+const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.9), std(0xffffff, 1, 0, { map: rugTex.texture }));
 rug.rotation.x = -Math.PI / 2;
-rug.position.set(-0.5, 0.006, -0.6);
+rug.position.set(-0.15, 0.006, -0.75);
 rug.receiveShadow = true;
 scene.add(rug);
 
-// A floor plant on the right balances the sofa on the left.
+// A floor plant in the right corner, behind the armchair.
 const plant = new THREE.Group();
 plant.name = 'plant';
-plant.position.set(1.8, 0, -1.55);
+plant.position.set(1.75, 0, -1.68); // in the corner, behind the armchair
 plant.scale.setScalar(1.15);
 scene.add(plant);
 const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.28, 24), std(0x9a5b3c, 0.8));
@@ -849,7 +1097,7 @@ function drawScreen(t) {
     g.font = '30px VT323, monospace';
     g.textAlign = 'center';
     if (Math.floor(t * 1.2) % 2 === 0) g.fillText('PRESS THE VCR', w / 2, h * 0.76);
-  } else {
+  } else if (tvMode === 'shelf') {
     g.fillStyle = '#070b14';
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#d9dee8';
@@ -858,32 +1106,117 @@ function drawScreen(t) {
     g.fillText('PAUSE TAPE', 36, 56);
     g.textAlign = 'right';
     g.fillText('SHELF', w - 36, 56);
-    const tapes = [['TES AJA', 'READY', '#62ff8f'], ['NO SIGNAL', '101 DAYS', '#6b7280']];
-    tapes.forEach(([name, st, col], i) => {
+    SHELF_TAPES.forEach((tape, i) => {
       const x = 36 + i * 290;
-      g.fillStyle = '#171a21';
-      g.fillRect(x, 92, 260, 170);
+      const lift = i === hoverCard ? 6 : 0; // the tape under the pointer lifts a little
+      g.fillStyle = i === hoverCard ? '#262a33' : '#171a21';
+      g.fillRect(x, 92 - lift, 260, 170);
       g.fillStyle = '#d3cdbd';
-      g.fillRect(x + 14, 106, 232, 96);
-      g.fillStyle = col;
-      g.fillRect(x + 14, 106, 6, 96);
+      g.fillRect(x + 14, 106 - lift, 232, 96);
+      g.fillStyle = tape.color;
+      g.fillRect(x + 14, 106 - lift, 6, 96);
       g.fillStyle = '#1a1a1e';
       g.textAlign = 'left';
       g.font = '32px VT323, monospace';
-      g.fillText(name, x + 32, 140);
+      g.fillText(tape.name, x + 32, 140 - lift);
       g.fillStyle = '#0b0e0c';
-      g.fillRect(x + 30, 156, 130, 34);
-      g.fillStyle = col;
+      g.fillRect(x + 30, 156 - lift, 130, 34);
+      g.fillStyle = tape.color;
       g.font = '28px VT323, monospace';
-      g.fillText(st, x + 38, 182);
+      g.fillText(tape.state, x + 38, 182 - lift);
       g.fillStyle = '#07080b';
-      g.fillRect(x + 14, 212, 232, 38);
+      g.fillRect(x + 14, 212 - lift, 232, 38);
+      if (tape.ready && i === hoverCard) {
+        playIcon(g, x + 110, 220 - lift, 22, '#62ff8f');
+      }
     });
+    g.textAlign = 'center';
+    g.font = '28px VT323, monospace';
+    if (notYet > 0) {
+      g.fillStyle = '#ffb84a';
+      g.fillText('NOT YET: THIS TAPE IS STILL WAITING', w / 2, 312);
+    } else {
+      g.fillStyle = 'rgba(217,222,232,0.7)';
+      g.fillText('CLICK A READY TAPE TO PLAY IT', w / 2, 312);
+    }
     recDot(g, 48, h - 44, 10, '#ff3b3b');
     g.fillStyle = '#ff3b3b';
     g.font = '32px VT323, monospace';
     g.textAlign = 'left';
     g.fillText('REC', 68, h - 34);
+  } else if (tvMode === 'insert') {
+    // The VCR is taking the tape: the picture drops to snow with a rolling bar.
+    g.fillStyle = '#0a0c12';
+    g.fillRect(0, 0, w, h);
+    const r = rng(Math.floor(t * 24));
+    for (let i = 0; i < 1400; i++) {
+      const v = Math.floor(r() * 140);
+      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.fillRect(r() * w, r() * h, 3, 2);
+    }
+    g.fillStyle = 'rgba(255,255,255,0.08)';
+    g.fillRect(0, ((t * 160) % (h + 80)) - 80, w, 60);
+    g.fillStyle = '#d9dee8';
+    g.font = '40px VT323, monospace';
+    g.textAlign = 'left';
+    g.fillText('INSERTING', 36, 60);
+  } else if (tvMode === 'loading') {
+    // The same blue loading screen as the app: 20 fixed blocks that light up one by one.
+    const p = THREE.MathUtils.clamp(seqT / SEQ.loading, 0, 1);
+    g.fillStyle = '#1d2fb8';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffffff';
+    g.font = '40px VT323, monospace';
+    g.textAlign = 'left';
+    playIcon(g, 36, 30, 26, '#ffffff');
+    g.fillText('PLAY', 72, 56);
+    g.textAlign = 'right';
+    g.fillText(`SP 0:00:0${Math.floor(p * 3)}`, w - 36, 56);
+    g.textAlign = 'center';
+    g.font = '52px VT323, monospace';
+    g.fillText(playing?.name ?? 'TAPE', w / 2, h * 0.42);
+    g.font = '32px VT323, monospace';
+    g.fillText('LOADING TAPE', w / 2, h * 0.56);
+    const n = 20;
+    const bw = 18;
+    const gap = 5;
+    const x0 = (w - (n * bw + (n - 1) * gap)) / 2;
+    const lit = Math.floor(p * n + 1e-6);
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = i < lit ? '#ffffff' : 'rgba(255,255,255,0.18)';
+      g.fillRect(x0 + i * (bw + gap), h * 0.64, bw, 22);
+    }
+  } else {
+    // play: the VHS replay starts (the app's Playback screen goes here).
+    g.fillStyle = '#05060a';
+    g.fillRect(0, 0, w, h);
+    const glow = g.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.7);
+    glow.addColorStop(0, 'rgba(60,80,140,0.35)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffffff';
+    g.font = '36px VT323, monospace';
+    g.textAlign = 'left';
+    playIcon(g, 36, 28, 24, '#62ff8f');
+    g.fillStyle = '#62ff8f';
+    g.fillText('PLAY', 70, 52);
+    g.fillStyle = '#ffffff';
+    g.textAlign = 'right';
+    const secs = Math.floor(seqT);
+    g.fillText(`SP 0:00:${String(secs % 60).padStart(2, '0')}`, w - 36, 52);
+    g.textAlign = 'center';
+    g.font = '58px VT323, monospace';
+    g.fillText(playing?.name ?? 'TAPE', w / 2, h * 0.45);
+    g.font = '30px VT323, monospace';
+    g.fillStyle = 'rgba(217,222,232,0.8)';
+    g.fillText('REPLAY · THE APP\'S PLAYBACK SCREEN', w / 2, h * 0.58);
+    // a tracking band that rolls through, like a worn tape
+    const by = ((seqT * 90) % (h + 120)) - 60;
+    g.fillStyle = 'rgba(255,255,255,0.07)';
+    g.fillRect(0, by, w, 26);
+    g.fillStyle = 'rgba(255,255,255,0.04)';
+    g.fillRect(0, by + 30, w, 8);
   }
   g.fillStyle = 'rgba(0,0,0,0.22)'; // scanlines
   for (let y = 0; y < h; y += 4) g.fillRect(0, y, w, 2);
@@ -900,40 +1233,131 @@ function drawVcrDisplay(t) {
   g.textAlign = 'center';
   const d = new Date();
   const colon = Math.floor(t) % 2 ? ':' : ' ';
-  g.fillText(tvMode === 'standby' ? `${String(d.getHours()).padStart(2, '0')}${colon}${String(d.getMinutes()).padStart(2, '0')}` : 'PLAY', c.width / 2, 48);
+  const label = { shelf: 'MENU', insert: 'LOAD', loading: 'LOAD', play: 'PLAY' }[tvMode];
+  g.fillText(label ?? `${String(d.getHours()).padStart(2, '0')}${colon}${String(d.getMinutes()).padStart(2, '0')}`, c.width / 2, 48);
   vcrDisplay.texture.needsUpdate = true;
 }
 
 // ── Mouse: camera turn, hover and click (Physics.Raycast) ─────────────
 
 const pointer = new THREE.Vector2(0, 0);
+const _lampW = V(0, 0, 0);
 const aim = new THREE.Vector2(0, 0); // the eased pointer the camera follows
 let hasPointer = false;
 let pressT = 1;
 let hover = null;
 const HINT_STANDBY = 'VCR · CURTAIN · LAMP · PHOTO';
 
+// TV modes: standby -> shelf (VCR clicked) -> insert (a READY tape clicked: the camera pulls back,
+// the cassette slides into the VCR) -> loading (blue screen, about 3 s) -> play (the camera eases in
+// to the screen: the VHS replay). BACK or Escape returns to the room from any of them.
+const SHELF_TAPES = [
+  { name: 'TES AJA', state: 'READY', color: '#62ff8f', ready: true },
+  { name: 'NO SIGNAL', state: '101 DAYS', color: '#6b7280', ready: false },
+];
+const SEQ = { insert: 1.5, slideFrom: 0.55, slideTo: 1.35, loading: 3.0 };
+let seqT = 0; // seconds in the current mode
+let playing = null; // the tape being played
+let notYet = 0; // seconds left of the "NOT YET" note
+let hoverCard = -1;
+
+// Camera moves: from where it is now to a pose, over a time, with an easing curve.
+const easeInOut = (x) => x * x * (3 - 2 * x);
+const easeIn = (x) => x * x * x; // starts slowly, speeds into the TV
+const cam = { fromPos: V(0, 0, 0), fromLook: V(0, 0, 0), fromClose: 0, to: null, t: 1, dur: 1, ease: easeInOut };
+const camPos = V(0, 0, 0);
+const camLook = V(0, 0, 0);
+let close = 0; // 0 = the room, 1 = right at the TV (fades the sun shafts, damps the cursor turn)
+function goTo(pose, dur = 1.3, ease = easeInOut) {
+  cam.fromPos.copy(camPos);
+  cam.fromLook.copy(camLook);
+  cam.fromClose = close;
+  cam.to = pose;
+  cam.t = 0;
+  cam.dur = dur;
+  cam.ease = ease;
+}
+
+function setMode(m) {
+  tvMode = m;
+  seqT = 0;
+  const inRoom = m === 'standby';
+  hint.textContent = inRoom ? HINT_STANDBY : m === 'shelf' ? '< BACK TO THE ROOM' : '< EJECT · BACK TO THE ROOM';
+  hint.classList.toggle('is-button', !inRoom);
+  document.body.classList.toggle('zoomed', !inRoom);
+  if (m === 'standby') { goTo(wide); cassette.visible = false; playing = null; }
+  if (m === 'shelf') goTo(POSES.tv);
+  if (m === 'insert') { goTo(POSES.insert, 1.0); cassette.visible = true; cassette.position.z = 0.42; }
+  if (m === 'play') goTo(POSES.play, 1.4, easeIn);
+}
 function toggleTv() {
-  tvMode = tvMode === 'standby' ? 'shelf' : 'standby';
   pressT = 0;
-  hint.textContent = tvMode === 'shelf' ? '< BACK TO THE ROOM' : HINT_STANDBY;
-  hint.classList.toggle('is-button', tvMode === 'shelf');
-  document.body.classList.toggle('zoomed', tvMode === 'shelf');
+  setMode(tvMode === 'standby' ? 'shelf' : 'standby');
 }
 makeClickable(vcr, 'vcr', toggleTv);
+vcr.userData.when = () => tvMode === 'standby' || tvMode === 'shelf';
 hint.textContent = HINT_STANDBY;
+
+// The tape cards on the shelf screen are buttons too: the raycast's uv says where on the screen.
+function cardAt(uv) {
+  if (!uv) return -1;
+  const cx = uv.x * 640;
+  const cy = (1 - uv.y) * 480;
+  return SHELF_TAPES.findIndex((_, i) => cx >= 36 + i * 290 && cx <= 296 + i * 290 && cy >= 92 && cy <= 262);
+}
+function playTape(i) {
+  const tape = SHELF_TAPES[i];
+  if (!tape) return;
+  if (!tape.ready) { notYet = 1.6; return; }
+  playing = tape;
+  setMode('insert');
+}
+makeClickable(screen, 'screen', () => playTape(cardAt(lastHit?.uv)));
+screen.userData.when = () => tvMode === 'shelf';
 
 window.addEventListener('pointermove', (e) => {
   if (e.pointerType === 'touch') return;
   hasPointer = true;
   pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
 });
-renderer.domElement.addEventListener('click', (e) => {
-  const o = clickableAt((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-  if (o && (tvMode === 'standby' || o.userData.name === 'vcr')) o.userData.click();
+const ndcOf = (e) => [(e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1];
+let suppressClick = false;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (tvMode !== 'standby') return;
+  raycaster.setFromCamera(_ndc.set(...ndcOf(e)), camera);
+  if (raycaster.intersectObject(beadHit, false).length) {
+    cord.held = true;
+    cord.clicked = false;
+    cord.startY = e.clientY;
+    cord.startExt = cord.ext;
+    renderer.domElement.setPointerCapture(e.pointerId);
+  }
 });
-hint.addEventListener('click', () => { if (tvMode === 'shelf') toggleTv(); });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && tvMode === 'shelf') toggleTv(); });
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!cord.held) return;
+  // pixels to metres at the lamp's distance, so the bead stays under the pointer
+  const dist = camera.position.distanceTo(lamp.getWorldPosition(_lampW));
+  const mPerPx = (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / innerHeight;
+  cord.ext = THREE.MathUtils.clamp(cord.startExt + (e.clientY - cord.startY) * mPerPx, 0, CORD_MAX);
+  cord.vel = 0;
+  if (!cord.clicked && cord.ext > CORD_CLICK) { cord.clicked = true; toggleLamp(); }
+});
+const releaseCord = () => {
+  if (!cord.held) return;
+  cord.held = false;
+  suppressClick = true; // the click that follows must not pull again
+  if (!cord.clicked) pullCord(); // let go without a real pull: it still clicks, like a plain click
+  else cord.swingVel += 1.2 + cord.ext * 14;
+};
+renderer.domElement.addEventListener('pointerup', releaseCord);
+renderer.domElement.addEventListener('pointercancel', releaseCord);
+renderer.domElement.addEventListener('click', (e) => {
+  if (suppressClick) { suppressClick = false; return; }
+  const o = clickableAt(...ndcOf(e));
+  if (o) o.userData.click();
+});
+hint.addEventListener('click', () => { if (tvMode !== 'standby') setMode('standby'); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && tvMode !== 'standby') setMode('standby'); });
 
 // ── Panel: time switch and hide ───────────────────────────────────────
 
@@ -971,24 +1395,25 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight);
   const aspect = innerWidth / innerHeight;
   camera.aspect = aspect;
+  const wasWide = cam.to === wide || cam.to === null;
   wide = aspect < 0.9 ? POSES.portrait : POSES.desktop;
+  if (wasWide) { cam.to = wide; if (cam.t >= 1 || cam.to === null) { camPos.copy(wide.pos); camLook.copy(wide.look); } }
   const dist = wide.pos.distanceTo(wide.look);
-  const need = aspect < 0.9 ? 2.9 : Math.max(5.0, 2.95 * aspect);
+  const need = aspect < 0.9 ? 3.3 : Math.max(5.8, 3.3 * aspect);
   camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(need / 2 / dist / aspect)), 36, 70);
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
 resize();
+camPos.copy(wide.pos);
+camLook.copy(wide.look);
 
 const timer = new THREE.Timer();
 const k = (rate, dt) => 1 - Math.exp(-rate * dt);
 const Y_AXIS = V(0, 1, 0);
-const camPos = V(0, 0, 0);
-const camLook = V(0, 0, 0);
 const offset = V(0, 0, 0);
 const origin = V(0, 0, 0);
 const hoverTint = new THREE.Color(0.07, 0.055, 0.03);
-let zoom = 0;
 let frameNo = 0;
 
 renderer.setAnimationLoop((now) => {
@@ -999,12 +1424,30 @@ renderer.setAnimationLoop((now) => {
 
   // Camera: eases between the room and the TV, and turns a little toward the cursor.
   // Still with reduced motion or on touch (no cursor).
-  zoom += ((tvMode === 'shelf' ? 1 : 0) - zoom) * k(reduced.matches ? 30 : 2.6, dt);
-  const z = zoom * zoom * (3 - 2 * zoom);
-  camPos.lerpVectors(wide.pos, POSES.tv.pos, z);
-  camLook.lerpVectors(wide.look, POSES.tv.look, z);
-  const still = reduced.matches || !hasPointer;
-  aim.lerp(still ? origin.set(0, 0, 0) : pointer, k(3, dt));
+  if (cam.to) {
+    cam.t = reduced.matches ? 1 : Math.min(1, cam.t + dt / cam.dur);
+    const e = cam.ease(cam.t);
+    camPos.lerpVectors(cam.fromPos, cam.to.pos, e);
+    camLook.lerpVectors(cam.fromLook, cam.to.look, e);
+    close = cam.fromClose + ((cam.to.close ?? 0) - cam.fromClose) * e;
+  }
+  const z = close;
+  const still = reduced.matches || !hasPointer || cord.held;
+  if (!cord.held) aim.lerp(still ? origin.set(0, 0, 0) : pointer, k(3, dt));
+
+  // The VHS sequence runs on its own clock.
+  seqT += dt;
+  notYet = Math.max(0, notYet - dt);
+  if (tvMode === 'insert') {
+    const f = THREE.MathUtils.clamp((seqT - SEQ.slideFrom) / (SEQ.slideTo - SEQ.slideFrom), 0, 1);
+    cassette.position.z = 0.42 + (0.1 - 0.42) * easeInOut(f);
+    cassette.position.y = 0.06 + 0.012 * (1 - f) * (f > 0 ? 1 : 0.4);
+    if (f >= 1 && cassette.visible) { cassette.visible = false; pressT = 0; } // swallowed by the VCR
+    if (seqT >= SEQ.insert) setMode('loading');
+  } else if (tvMode === 'loading' && seqT >= SEQ.loading) {
+    setMode('play');
+  }
+  updateCord(dt);
   const amount = 1 - 0.6 * z;
   offset.copy(camPos).sub(camLook).applyAxisAngle(Y_AXIS, aim.x * 0.13 * amount);
   offset.y += aim.y * 0.12 * amount;
@@ -1016,8 +1459,16 @@ renderer.setAnimationLoop((now) => {
   const co = curtainAmount * curtainAmount * (3 - 2 * curtainAmount);
   curtainOpen = co;
   const pw = PANEL_CLOSED + (PANEL_OPEN - PANEL_CLOSED) * co;
-  curtainL.scale.x = pw;
-  curtainR.scale.x = pw;
+  // The hem follows the moving panel like a spring (it lags, then swings back past and settles).
+  cloth.vel = dt > 0 ? (pw - cloth.prevW) / dt : 0;
+  cloth.prevW = pw;
+  const lagGoal = -cloth.vel * 0.22;
+  cloth.lagVel += ((lagGoal - cloth.lag) * 70 - cloth.lagVel * 7) * dt;
+  cloth.lag = reduced.matches ? 0 : THREE.MathUtils.clamp(cloth.lag + cloth.lagVel * dt, -0.12, 0.12);
+  const stillCloth = reduced.matches;
+  const hoverAmt = hover === 'window' ? 1 : 0;
+  shapeCurtain(curtainL, pw, t, stillCloth, hoverAmt);
+  shapeCurtain(curtainR, pw, t, stillCloth, hoverAmt);
 
   // Light glides toward the current period over a few seconds, like the sky changing.
   if (T.name !== currentName()) setTarget(currentName());
@@ -1040,7 +1491,7 @@ renderer.setAnimationLoop((now) => {
   renderer.toneMappingExposure = A.exposure;
   const flick = reduced.matches ? 0 : Math.sin(t * 7.3) * 0.04 + Math.sin(t * 2.1) * 0.03; // a live picture flickers
   tvLight.intensity = A.tv * (1 + flick);
-  tvLight.color.set(tvMode === 'standby' ? 0x5a74ff : 0x9fb0d8);
+  tvLight.color.set(tvMode === 'standby' || tvMode === 'loading' ? 0x5a74ff : tvMode === 'insert' ? 0x9aa0aa : 0x9fb0d8);
 
   // The visible sun and its shafts; both fade when the camera is close to the TV so they never
   // cover the screen, and when the curtain is closed.
@@ -1055,14 +1506,18 @@ renderer.setAnimationLoop((now) => {
   }
 
   // Hover: the first solid thing under the pointer, if it is a button.
-  if (hasPointer && frameNo % 2 === 0) hover = clickableAt(pointer.x, pointer.y)?.userData.name ?? null;
+  if (hasPointer && frameNo % 2 === 0) {
+    hover = clickableAt(pointer.x, pointer.y)?.userData.name ?? null;
+    hoverCard = hover === 'screen' ? cardAt(lastHit?.uv) : -1;
+    if (hover === 'screen' && hoverCard < 0) hover = null;
+  }
   if (!hasPointer) hover = null;
-  renderer.domElement.style.cursor = hover && (tvMode === 'standby' || hover === 'vcr') ? 'pointer' : 'default';
+  renderer.domElement.style.cursor = cord.held ? 'grabbing' : hover ? 'pointer' : 'default';
 
   pic.material.emissive.set(hover === 'frame' ? 0x1c1c1c : 0x000000);
 
   // Curtain fabric: light shines through it when it is closed (daylight behind it); hover brightens it.
-  curtainMat.emissive.copy(C.glow).multiplyScalar((1 - co) * Math.min(1.2, A.sunI / 3) * 0.55);
+  curtainMat.emissive.copy(C.glow).multiplyScalar((1 - co) * Math.min(1.2, A.sunI / 3) * 0.16); // a soft glow through the cloth; more would flatten the folds
   if (hover === 'window') curtainMat.emissive.add(hoverTint);
 
   ceiling.material.emissiveIntensity = 0.45 * (1 - 0.85 * A.night); // cream by day, dark at night
@@ -1089,7 +1544,7 @@ renderer.setAnimationLoop((now) => {
 });
 
 // For the automated checks.
-const named = { vcr: vcrShell, screen, frame, lamp, sofa, bookshelf, plant, window: windowGroup, cabinet: cabBody };
+const named = { vcr: vcrShell, screen, frame, lamp, sofa, armchair, table, bookshelf, plant, window: windowGroup, cabinet: cabBody };
 const _part = new THREE.Box3();
 // Bounding box of the solid meshes only: glows, light shafts and invisible click boxes don't count.
 function solidBox(root) {
@@ -1124,6 +1579,31 @@ window.__room = {
   camera,
   status,
   getMode: () => tvMode,
+  seq: () => ({ mode: tvMode, t: seqT, cassette: cassette.visible, cassetteZ: cassette.position.z, close, camT: cam.t, playing: playing?.name ?? null }),
+  cardPx: (i) => { // pixel centre of a tape card on the TV screen
+    const local = V((36 + i * 290 + 130) / 640 * 0.64 - 0.32, 0.24 - (177 / 480) * 0.48, 0);
+    return toPixels(screen.localToWorld(local));
+  },
+  cord: () => ({ ext: cord.ext, held: cord.held, swing: cord.swing }),
+  rotY: (name) => named[name].rotation.y,
+  tableItems: () => { let books = 0, papers = 0; table.traverse((o) => { if (o.userData.kind === 'book') books++; if (o.userData.kind === 'paper') papers++; }); return { books, papers }; },
+  photoMatchesPreview: () => { // compare the frame texture and the preview at a few points (same crop)
+    if (!photoImg) return false;
+    const a = photoCanvas.getContext('2d');
+    const b = photoPreview.getContext('2d');
+    return [[0.25, 0.25], [0.5, 0.5], [0.75, 0.6], [0.4, 0.85]].every(([u, v]) => {
+      const p = a.getImageData(Math.floor(u * FW), Math.floor(v * FH), 1, 1).data;
+      const q = b.getImageData(Math.floor(u * photoPreview.width), Math.floor(v * photoPreview.height), 1, 1).data;
+      return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) < 60;
+    });
+  },
+  beadPx: () => toPixels(bead.getWorldPosition(V(0, 0, 0))),
+  photoState: () => ({ has: !!photoImg, panel: !photoPanel.hidden, ...photoView, stored: (() => { try { return (localStorage.getItem(PHOTO_KEY) || '').length; } catch { return -1; } })() }),
+  curtainShape: () => { // how far the hem of the left panel is from straight below its top edge (cloth motion)
+    const p = curtainL.geometry.attributes.position;
+    const top = p.getX(CURTAIN_NU), bottom = p.getX(p.count - 1);
+    return { top, bottom, lag: cloth.lag, depth: Math.max(...Array.from({ length: CURTAIN_NU + 1 }, (_, i) => Math.abs(p.getZ(i)))) };
+  },
   getPeriod: () => T.name,
   project,
   ndcSpan,
@@ -1136,7 +1616,6 @@ window.__room = {
   curtain: () => ({ target: curtainTarget, open: curtainOpen }),
   curtainPoint: () => toPixels(V(ROD.x0 + 0.09, (CURTAIN_TOP + CURTAIN_BOTTOM) / 2, CURTAIN_Z)),
   lamp: lampState,
-  photo: () => ({ has: hasPhoto, w: photoSize.w, h: photoSize.h, stored: (() => { try { return (localStorage.getItem(PHOTO_KEY) || '').length; } catch { return -1; } })() }),
   worldPos: (name) => solidBox(named[name]).getCenter(V(0, 0, 0)).toArray(),
   worldBox: (name) => { const b = solidBox(named[name]); return { min: b.min.toArray(), max: b.max.toArray() }; },
   sunDiscPx: () => toPixels(sunDisc.position),
