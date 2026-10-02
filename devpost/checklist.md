@@ -63,6 +63,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
 
 - [x] Early usable behavior explored — after slice 2, the full pause-to-restart journey works in the browser; the learner records, plays back, and times a restart, and gives feedback that can shape the VHS effect layer and the remaining slices. Learner feedback: all five learner-check steps behaved as expected; the pacing (blue screen about 1.2 s, about 2.5 s between answers) feels right; the look is "still too plain" and needs polish, with shader.se as the visual reference; the VHS effect during playback should be clearly visible, "not too subtle and not too strong."
 - [ ] Calendar device test — after slice 4, the learner opens the `.ics` in Outlook and on their Android phone and reports what happened; the agent can't operate those apps, and the findings go into the README in slice 5
+  - Outlook (new Outlook for Windows, 2 Oct 2026, learner's screenshots): `pause-tape-tes-2-2026-10-03.ics` imported through Add calendar > Upload from file. The event shows the title "▶ Tes 2 — tape ready" (the ▶ and the em dash survive), Sat 10/3/2026 as an all-day event, shown as Free, with the note "First step: …" in the body. Still to confirm: the 08:00 reminder on the day. Android: not tested yet.
 - [ ] Final kick-the-tires exploration and feedback completed
 
 ## Final Review
