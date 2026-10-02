@@ -10,6 +10,10 @@ import * as THREE from '../assets/vendor/three.module.min.js';
 import { RoomEnvironment } from '../assets/vendor/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from '../assets/vendor/addons/geometries/RoundedBoxGeometry.js';
 import { CSS3DRenderer, CSS3DObject } from '../assets/vendor/addons/renderers/CSS3DRenderer.js';
+import { EffectComposer } from '../assets/vendor/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from '../assets/vendor/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from '../assets/vendor/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from '../assets/vendor/addons/postprocessing/OutputPass.js';
 import { reducedMotion, highContrast, soundOn, setPref, onPrefsChange } from './prefs.js';
 
 const stage = document.querySelector('[data-room-stage]');
@@ -49,6 +53,53 @@ const scene = new THREE.Scene();
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 40);
 const raycaster = new THREE.Raycaster();
+
+// Post-processing (learner choice: three.js EffectComposer): like a URP Volume with Vignette, Color
+// Adjustments and Film Grain. One extra full-screen pass does all three, after the tone mapping
+// (OutputPass), on display colours: grading bright lamp light before it turned the lamp's halo cyan. The TV glass keeps its alpha 0 through it, so the app still shows there.
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uGrain: { value: 0.022 },
+    uVignette: { value: 0.28 },
+    uWarm: { value: 0.045 },
+    uAmount: { value: 1 }, // 0 = no effect (inside the TV)
+    uAspect: { value: 1 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uTime, uGrain, uVignette, uWarm, uAmount, uAspect;
+    varying vec2 vUv;
+    float hash(vec2 p) { p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      c.rgb = clamp(c.rgb, 0.0, 1.0);
+      // warm grade: a little more red, a little less blue, gentle lift of the shadows
+      vec3 g = c.rgb * vec3(1.0 + uWarm, 1.0 + uWarm * 0.35, 1.0 - uWarm * 0.6);
+      g = mix(g, g * g * (3.0 - 2.0 * g) * 1.02 + 0.004, 0.25); // soft S-curve
+      // vignette: darker corners, wider than tall
+      vec2 d = (vUv - 0.5) * vec2(uAspect, 1.0) / max(uAspect, 1.0);
+      float vig = smoothstep(0.38, 0.9, length(d) * 1.25);
+      g *= 1.0 - uVignette * vig;
+      // film grain: fresh every frame, stronger in the dark parts like real film
+      float n = hash(gl_FragCoord.xy + fract(uTime) * 917.0) - 0.5;
+      g += n * uGrain * (0.4 + 0.6 * (1.0 - clamp(dot(g, vec3(0.333)), 0.0, 1.0)));
+      g = clamp(g, 0.0, 1.0);
+      gl_FragColor = vec4(mix(c.rgb, max(g, 0.0), uAmount), c.a);
+    }`,
+};
+// The composer renders into a target with alpha, so the hole in the TV glass stays see-through.
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, format: THREE.RGBAFormat }));
+const renderPass = new RenderPass(scene, camera);
+renderPass.clearAlpha = 0;
+composer.addPass(renderPass);
+composer.addPass(new OutputPass()); // tone mapping + sRGB first, so the grade works on 0..1 colours
+const gradePass = new ShaderPass(GradeShader);
+composer.addPass(gradePass);
 const _ndc = new THREE.Vector2();
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -1321,6 +1372,65 @@ function aimShaft(d) {
   d.mesh.quaternion.setFromRotationMatrix(_basis);
 }
 
+// Dust in the window light: a few hundred soft points drifting inside the sun shafts' column, one draw
+// call (Points), moved in the vertex shader so the CPU does nothing per frame. They only show where
+// the light is (brightest along the shafts' axis), fade with the shafts, and stand still with
+// reduced motion.
+const DUST_N = 180;
+const dustGeo = new THREE.BufferGeometry();
+{
+  const r = rng(77);
+  const base = new Float32Array(DUST_N * 3);
+  const seed = new Float32Array(DUST_N);
+  const start = V(fx - 0.3, fy + 0.18, WALL_Z + 0.1);
+  for (let i = 0; i < DUST_N; i++) {
+    const along = 0.1 + r() * 2.1; // metres along the light from the window
+    const side = V(r() - 0.5, r() - 0.5, r() - 0.5).multiplyScalar(0.55 * (0.4 + along / 2.4));
+    const p = start.clone().addScaledVector(SUN_DIR, along).add(side);
+    base.set([p.x, p.y, p.z], i * 3);
+    seed[i] = r();
+  }
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(base, 3));
+  dustGeo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  dustGeo.boundingSphere = new THREE.Sphere(start.clone().addScaledVector(SUN_DIR, 1.2), 2.5);
+}
+const dustMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uColor: { value: new THREE.Color(0xfff0d0) }, uScale: { value: 1 },
+    uStart: { value: V(fx - 0.3, fy + 0.18, WALL_Z + 0.1) }, uDir: { value: SUN_DIR.clone() } },
+  vertexShader: /* glsl */ `
+    attribute float seed;
+    uniform float uTime, uScale;
+    uniform vec3 uStart, uDir;
+    varying float vLight;
+    void main() {
+      float t = uTime * (0.05 + 0.05 * seed) + seed * 40.0;
+      vec3 p = position + vec3(sin(t * 1.3 + seed * 7.0), sin(t * 0.9 + seed * 3.0) * 0.6 - 0.25 * fract(t * 0.05), cos(t * 1.1 + seed * 5.0)) * 0.06;
+      // brightness: how close to the middle of the light column it floats
+      vec3 rel = p - uStart;
+      float along = dot(rel, uDir);
+      float off = length(rel - uDir * along);
+      vLight = smoothstep(0.42, 0.05, off / (0.4 + along / 2.4)) * smoothstep(0.0, 0.3, along) * smoothstep(2.4, 1.4, along);
+      vLight *= 0.6 + 0.4 * sin(t * 3.0 + seed * 11.0); // twinkle as the specks turn
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = max(2.0, uScale * (0.007 + 0.006 * seed) / -mv.z); // specks of 7-13 mm, so they read at room distance
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform float uOpacity;
+    uniform vec3 uColor;
+    varying float vLight;
+    void main() {
+      float d = length(gl_PointCoord - 0.5);
+      float a = smoothstep(0.5, 0.1, d) * vLight * uOpacity * 1.6;
+      if (a < 0.003) discard;
+      gl_FragColor = vec4(uColor * a, a);
+    }`,
+});
+const dust = noPick(new THREE.Points(dustGeo, dustMat));
+dust.renderOrder = 3;
+scene.add(dust);
+
 // Time of day (prd.md > Look and Feel): four periods by the visitor's local hour, plus ?time=.
 const PERIODS = {
   morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97, disc: 0xffc880, discSize: 1.0, beam: 0xffd9a0, beamO: 0.3, lamp: 0 },
@@ -1710,6 +1820,11 @@ onPrefsChange(syncButtons);
 // window's shape; on a phone the camera frames the cabinet (TV, VCR, lamp) only.
 function resize() {
   renderer.setSize(innerWidth, innerHeight);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(innerWidth, innerHeight);
+  // pixels per metre at 1 m away, so a speck keeps its real size whatever the window or lens
+  dustMat.uniforms.uScale.value = (innerHeight * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  gradePass.uniforms.uAspect.value = innerWidth / innerHeight;
   css.setSize(innerWidth, innerHeight);
   const aspect = innerWidth / innerHeight;
   camera.aspect = aspect;
@@ -1829,6 +1944,10 @@ renderer.setAnimationLoop((now) => {
   sunDisc.material.opacity = co;
   sunDisc.scale.setScalar(A.discSize);
   const shaftBase = A.beamO * (1 - z) * co * co; // gone at the TV, so no band of light crosses the app
+  dustMat.uniforms.uOpacity.value = Math.min(0.9, shaftBase * 2.4);
+  dustMat.uniforms.uColor.value.copy(C.beam);
+  dustMat.uniforms.uTime.value = reduced.matches ? 0 : t;
+  dust.visible = shaftBase > 0.005;
   for (const d of shafts) {
     aimShaft(d);
     d.mat.color.copy(C.beam);
@@ -1885,7 +2004,13 @@ renderer.setAnimationLoop((now) => {
     renderer.shadowMap.needsUpdate = true;
     shadowsDirty = false;
   }
-  renderer.render(scene, camera);
+  // Grade, vignette and grain over the room; they fade out as the camera goes into the TV, where the
+  // app has its own VHS look. Still grain with reduced motion; all off in high contrast.
+  const post = highContrast() ? 0 : 1 - THREE.MathUtils.smoothstep(close, 0.6, 1);
+  gradePass.uniforms.uAmount.value = post;
+  gradePass.uniforms.uTime.value = reduced.matches ? 0 : t;
+  if (post > 0.001) composer.render(dt);
+  else renderer.render(scene, camera); // in the TV: skip the extra pass
   css.render(cssScene, camera);
 });
 
@@ -2128,7 +2253,11 @@ window.__room = {
     return { from: at(from), to: at(to) };
   },
   setShafts: (on) => { for (const d of shafts) d.mesh.visible = on; },
+  setDust: (on) => { dust.material.visible = on; },
+  dust: () => ({ n: DUST_N, visible: dust.visible, opacity: dustMat.uniforms.uOpacity.value }),
   setSunDisc: (on) => { sunDisc.visible = on; },
+  post: () => ({ amount: gradePass.uniforms.uAmount.value, passes: composer.passes.length }),
+  setPost: (on) => { gradePass.enabled = on; },
   hover: () => ({ name: hover, amt: { ...hoverAmt }, label: hoverLabel.textContent, labelOpacity: Number(hoverLabel.style.opacity || 0) }),
   setSunShadow: (on) => { sun.castShadow = on; shadowsDirty = true; },
   setContact: (on) => { for (const m of contact) m.visible = on; },
