@@ -49,7 +49,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
   Learner check: Save a tape and press "Add to calendar (.ics)". Open the downloaded file in Outlook and check that there's an all-day event on the return date, that the first step appears in the description, and that the alarm shows 08:00. Then send the file to your Android phone, open it with Google Calendar, and tell me what happened to the event and the alarm.
   Commit: `Add the calendar reminder file`
 
-- [ ] **5. Anyone can run Pause Tape from the README**
+- [x] **5. Anyone can run Pause Tape from the README**
   Becomes usable: `README.md` explains what Pause Tape is and who it's for, how to run it locally, how to clear the saved tapes to rehearse the demo from an empty shelf, and a "Known limitations" section with the actual Outlook and Android findings from slice 4. The font's license is credited. The live GitHub Pages link is left as a placeholder for `6-ship`.
   Why now: It captures the setup and the calendar findings while they're fresh, and gives the repository what a reader needs to run the app before `6-ship` makes it public. It's last because it describes what the build actually produced.
   PRD ref: `prd.md > Deferred From the POC` (no in-app delete, so rehearsal happens through storage), `prd.md > Calendar Reminder (.ics)`
@@ -58,6 +58,8 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
   Verify (mechanical): Follow the README from a clean clone into a temporary folder: start the server, load the app, and confirm it runs. Check that every file path the README mentions exists, and that the limitations match what slice 4 found.
   Learner check: Read the README as if you were a judge seeing the project for the first time. Tell me whether anything is unclear or missing.
   Commit: `Add README with run steps and known limitations`
+  Done (3 Oct 2026): `README.md` (what it is and who it's for, a 1-minute try-it path with the sample tape, features, where the data lives, local run steps and demo URLs, the reset step for all `pausetape.` keys, Known limitations from slice 4 and the build, how it's built, credits). Learner request: online now so others can test, so GitHub Pages is on early (Deploy from a branch, `main`, `/ (root)`, `.nojekyll`): https://fairolegends.github.io/pause-tape/ (built, HTTPS enforced; `devpost/learner-profile.md` is git-ignored and returns 404). The live link replaces the placeholder. The browser checks were rerun against the live URL.
+  Still to do: the learner reads the README as a judge would.
 
 ## Hands-on Checkpoints
 
@@ -81,6 +83,7 @@ Build mode: fast (chosen by the learner at the start of `5-build`)
   - Sound round 2 (3 Oct 2026): tape in, loading whirr, text ticks and blips, screen-change thump, lamp switch, curtain slide, timer alarm; SOUND button top left. Core additions (learner chose all eight, 3 Oct 2026): sample tape "Pause Tape" (only on an empty shelf, erasable), intro "MESSAGE FROM … · N DAYS AGO", PAUSE AGAIN (project name), permanent erase with confirmation, average BACK ON IT above the shelf, backup/restore without the photo, timer alarm: done and checked. Voice note (max 40 s, IndexedDB, approved): done and checked with Edge's fake microphone. Learner check: record a real voice note on the laptop (Edge asks for the microphone once).
   - Voice note meter and time bar (3 Oct 2026, learner: microphone works but no sign the audio runs): done and checked. Sample tape text: approved by the learner.
   - Seasons (3 Oct 2026): SEASON row (AUTO by month), four Seedream day pictures plus script-made nights, snow/petals/leaves, summer heat shimmer, season ambience, RAIN switch: done and checked. Learner check: look at each season by day and night.
+  - Tape eject and season-loading fix (3 Oct 2026, learner request): in the room, STOP / leaving BACK ON IT / BACK TO THE ROOM with a tape inside make the camera pull back, EJECT shows on the TV, the cassette slides out and lifts away with an eject sound, then the camera returns into the TV (or to the room). The loading screen no longer comes back when a season's pictures load later (the progress listener now runs for the first load only). Checked: 5 eject checks.
   - Still to do: the learner tries the new screen change (speed of the zoom and of the bend, how the curve looks); README; the mockup page stays in `devpost/` as the design record. VHS effects kept inside the screen, still on touch screens and with reduced motion. The two window pictures (day and night) are already in `assets/room/`, generated with Seedream 5.0 pro in a semi-cartoon style; the frame takes the player's own photo (no photo is bundled). AI art must have no logos or watermarks and is credited in the README (slice 5: name the model and the gateway, and keep the C2PA data in the files).
 - [ ] Final review complete — feedback resolved and learner confirms ready to ship
 
