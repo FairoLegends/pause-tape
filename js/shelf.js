@@ -31,13 +31,14 @@ function cassette(tape, today, onSelect) {
   button.type = 'button';
   button.dataset.tapeId = tape.id;
   button.dataset.state = state;
-  button.setAttribute('aria-label', `${tape.project}, return date ${date}, ${line}`);
+  button.setAttribute('aria-label', `${tape.project}, return date ${date}, ${line}${tape.voiceMs ? ', with a voice note' : ''}`);
 
   const label = el('span', 'tape__label');
   if (tape.sample) {
     button.classList.add('tape--sample');
     label.append(el('span', 'tape__sample', 'SAMPLE'));
   }
+  if (tape.voiceMs) button.classList.add('tape--voice');
   label.append(
     el('span', 'tape__project', tape.project),
     el('span', 'tape__date', date),

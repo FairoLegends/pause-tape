@@ -5,6 +5,7 @@
 import { formatVcrDate, introLine } from './tapes.js';
 import { tuneIn, settleIn, loadBar, nudge, killMotion } from './motion.js';
 import { loadingWhirr, blip, staticBurst, timerAlarm } from './sound.js';
+import { loadVoice, voiceClock } from './voice.js';
 
 // Pacing (spec.md > Implementation details), kept in one place like tuning values on a
 // ScriptableObject.
@@ -52,6 +53,45 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
   const title = q('[data-play-title]');
   const list = q('[data-answers]');
   const intro = q('[data-intro]');
+  const voiceRow = q('[data-voice-play]');
+  const voiceBtn = q('[data-voice-toggle]');
+  const voiceBar = q('[data-voice-progress]');
+  const voiceTime = q('[data-voice-time]');
+  let audio = null;
+  let audioUrl = null;
+  voiceBtn.addEventListener('click', () => {
+    if (!audio) return;
+    if (audio.paused) { if (audio.ended) audio.currentTime = 0; audio.play().catch(() => {}); } else audio.pause();
+  });
+  function stopVoice() {
+    audio?.pause();
+    audio = null;
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    audioUrl = null;
+    voiceRow.hidden = true;
+  }
+  // The voice note plays right after the intro line, while the written answers follow.
+  async function startVoice(s) {
+    if (!s.tape.voiceMs) return;
+    const blob = await loadVoice(s.tape.id);
+    if (!blob || session !== s) return;
+    audioUrl = URL.createObjectURL(blob);
+    audio = new Audio(audioUrl);
+    const total = s.tape.voiceMs;
+    const sync = () => {
+      const playing = audio && !audio.paused && !audio.ended;
+      voiceBtn.classList.toggle('is-playing', playing);
+      voiceBtn.setAttribute('aria-label', playing ? 'Pause the voice note' : 'Play the voice note');
+      const t = (audio?.currentTime ?? 0) * 1000;
+      voiceBar.style.width = `${Math.min(100, (t / total) * 100)}%`;
+      voiceTime.textContent = `${voiceClock(t)} / ${voiceClock(total)}`;
+    };
+    for (const ev of ['play', 'pause', 'ended', 'timeupdate']) audio.addEventListener(ev, sync);
+    voiceRow.hidden = false;
+    flash(voiceRow);
+    sync();
+    audio.play().catch(sync); // started from the player's click on the tape, so the browser allows it
+  }
   const skip = q('[data-action="skip"]');
   const firstBox = q('[data-first-step]');
   const firstText = q('[data-first-text]');
@@ -92,6 +132,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
       intro.hidden = false;
       flash(intro);
       tuneIn(intro);
+      later(s, Math.min(600, PACE.introMs), () => startVoice(s));
       later(s, PACE.introMs, () => next(s));
     });
   }
@@ -136,6 +177,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
       list.append(s.tape[key] ? answer(label, s.tape[key]) : noSignal(label, false));
     }
     s.step = ANSWERS.length;
+    if (!audio) startVoice(s); // ▶▶ before the note appeared: show it too
     showFirstStep(s, false);
   }
 
@@ -180,6 +222,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
 
   // Leaving playback by any route cancels its timers, so nothing runs in the background.
   function stop() {
+    stopVoice();
     if (!session) return;
     for (const id of session.pending) clearTimeout(id);
     clearInterval(session.ticker);
@@ -230,5 +273,5 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     setTimeout(() => node.classList.remove('glitch'), PACE.glitchMs);
   }
 
-  return { startPlayback, stop };
+  return { startPlayback, stop, voice: () => ({ shown: !voiceRow.hidden, playing: Boolean(audio && !audio.paused), time: audio?.currentTime ?? 0 }) };
 }

@@ -252,7 +252,7 @@ The learner asked what could be added to the core while there is time left, and 
 - **Stat line above the shelf:** "AVERAGE BACK ON IT · N MIN · N TAPES", the average over completed tapes (shown once one is completed).
 - **Backup:** BACKUP downloads the tapes as a `.json` file; RESTORE adds the tapes from such a file that aren't on the shelf yet. The photo is not included (learner choice).
 - **Timer alarm:** three soft beeps when the 10 minutes run out (with sound on).
-- **Voice note (next):** an optional spoken message of at most 40 seconds, stored in the browser's IndexedDB because localStorage is too small for audio (learner approved).
+- **Voice note:** an optional spoken message of at most 40 seconds on the Record Screen (RECORD VOICE → STOP VOICE, LISTEN, DELETE, RECORD AGAIN), stored in this browser's IndexedDB because localStorage is too small for audio (learner approved). It plays on its own row (‖/▶ and a progress bar) right after the intro line while the written answers follow. The shelf marks such tapes VOICE. Without a microphone, or if access is refused, the tape works the same without it. Backups and erasing: the note isn't in the backup file; erasing the tape deletes it.
 
 ## Deferred From the POC
 - **Archiving tapes** — the learner chose permanent erase instead (see Core Additions).

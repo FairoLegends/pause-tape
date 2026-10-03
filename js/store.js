@@ -59,9 +59,11 @@ export function visibleTapes(list, today = todayLocal()) {
   return list.length > 0 || sampleErased() ? list : [sampleTape(today)];
 }
 
-// ── Backup: the tapes as a JSON file (the player's photo is not included) ──
+// ── Backup: the tapes as a JSON file (the player's photo and voice notes are not included) ──
 export function buildBackup(list, now = new Date()) {
-  return JSON.stringify({ app: 'pause-tape', version: 1, exportedAt: now.toISOString(), tapes: list }, null, 2);
+  // Voice notes stay in this browser (they're audio, too big for a text file), so the copy drops voiceMs.
+  const tapes = list.map(({ voiceMs, ...t }) => t);
+  return JSON.stringify({ app: 'pause-tape', version: 1, exportedAt: now.toISOString(), tapes }, null, 2);
 }
 
 // Reads a backup file's text. Returns the valid tapes in it, or null if it isn't a Pause Tape backup.

@@ -84,6 +84,17 @@
                 <span class="field__name">WHY THIS PROJECT MATTERS TO ME</span>
                 <textarea name="why" rows="3"></textarea>
               </label>
+              <!-- Optional voice note, up to 40 s, kept in this browser (js/voice.js) -->
+              <div class="voice" data-voice>
+                <span class="field__name">VOICE NOTE <span class="field__hint">OPTIONAL · UP TO 0:40</span></span>
+                <div class="voice__row">
+                  <button class="btn btn--rec" type="button" data-voice-rec><span class="ico ico--rec" aria-hidden="true"></span><span data-voice-rec-text>RECORD VOICE</span></button>
+                  <button class="btn" type="button" data-voice-listen hidden><span class="ico ico--play" aria-hidden="true"></span>LISTEN</button>
+                  <button class="btn btn--quiet" type="button" data-voice-delete hidden>DELETE</button>
+                  <span class="voice__clock" data-voice-clock aria-live="polite"></span>
+                </div>
+                <p class="voice__note" data-voice-note hidden></p>
+              </div>
             </fieldset>
           </div>
 
@@ -148,6 +159,12 @@
           <span class="osd__stamp" data-play-title></span>
         </header>
         <p class="intro" data-intro hidden></p>
+        <div class="voice-play" data-voice-play hidden>
+          <button class="btn" type="button" data-voice-toggle aria-label="Play the voice note"><span class="ico ico--play" aria-hidden="true"></span></button>
+          <span class="answer__label">VOICE NOTE</span>
+          <span class="voice-play__bar" aria-hidden="true"><span data-voice-progress></span></span>
+          <span class="voice__clock" data-voice-time></span>
+        </div>
         <ol class="answers" data-answers aria-live="polite"></ol>
         <div class="first" data-first-step hidden>
           <span class="answer__label">FIRST STEP WHEN I COME BACK</span>

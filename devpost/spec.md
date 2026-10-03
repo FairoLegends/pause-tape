@@ -212,6 +212,7 @@ BuildWithAI-Basics/
 │   ├── crt.js            # three.js shader layer over the screen (grain, tracking band, scanlines), follows --vhs
 │   ├── room.js           # The three.js room around the TV (laptop/desktop with WebGL); puts the app screen on the TV glass
 │   ├── sound.js          # Rain, clock, lo-fi and the VCR/tape/static effects, made with Web Audio; off until the player turns it on
+│   ├── voice.js          # Optional voice note: record (max 40 s), IndexedDB storage, playback
 │   ├── prefs.js          # Reduce motion, high contrast and sound switches (pausetape.prefs.v1)
 │   └── motion.js         # GSAP: text tuning in, blue-screen loading bar; the freeze-and-glitch screen change
 ├── assets/
@@ -306,6 +307,7 @@ Stored in `assets/fonts/` with its license. Loaded with `@font-face` in `base.cs
   - `js/tapes.js`: `introLine(tape, today)` counts days from the local date of `recordedAt`; `backOnItStats(list)` gives the rounded average and count of completed tapes, or null.
   - Screens: a new `erase` screen (confirmation); the shelf gains the stat line, ⏏ per tape (a sibling button in a `.tape-slot`, 32 px, 44 px on touch), BACKUP / RESTORE (a hidden file input) and a short status note; playback gains the intro line (`PACE.introMs` 1600 ms before the first answer; ▶▶ shows it at once); BACK ON IT gains PAUSE AGAIN and BACK TO SHELF (pointing at or focusing them holds the 5 s return).
   - The room's standby screen counts the sample tape as READY, so the VCR glows on a first visit.
+  - Voice note (`js/voice.js`): `MediaRecorder` on `getUserMedia({ audio })` (Opus in WebM where supported, 48 kbit/s, about 240 KB for 40 s), stopped at `VOICE_MAX_MS` 40 000; under 0.5 s is dropped. The Blob is stored in IndexedDB database `pausetape`, store `voice`, keyed by the tape id; the tape gets `voiceMs`. Saving the note failing (quota, private mode) drops `voiceMs` and keeps the tape. Playback loads it 0.6 s into the intro and plays it (the click on the tape is the user gesture browsers need); STOP, leaving, or another tape stops it. Recording needs a secure page (https or localhost); otherwise the button is disabled with a note.
 - **Room polish round (learner list, 2 Oct 2026; learner choices: do it all now in order; sound made in code; post-processing with EffectComposer; HOW IT WORKS = the AI model and the prompts; WebP only)**:
   - Baked lighting: the sun's shadow map is drawn once and redrawn only while the curtain moves; a baked floor AO map (one canvas, one quad) grounds every piece (soft wide shade, darker contact under bases and legs).
   - Hover: each clickable thing's highlight and a name label fade in and out (about 0.2 s); the cursor turns to a pointer.

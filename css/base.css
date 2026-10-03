@@ -582,6 +582,101 @@ body {
   letter-spacing: 0.06em;
 }
 
+/* ── Voice note: the Record Screen row and the playback row ── */
+
+.voice {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+
+.voice__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.voice__clock {
+  color: var(--ink-dim);
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice__note {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+}
+
+.btn--rec.is-recording {
+  background: rgba(255, 59, 59, 0.16);
+}
+
+.btn--rec.is-recording .ico--rec {
+  animation: rec-blink 1s steps(1) infinite;
+}
+
+.reduce-motion .btn--rec.is-recording .ico--rec {
+  animation: none;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.voice-play {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 6px 8px;
+  padding: 2px 12px;
+  border-left: 2px solid var(--ready);
+}
+
+.voice-play .btn {
+  padding: 0.25em 0.6em;
+}
+
+/* Playing: the ▶ becomes ‖ (two bars drawn in CSS). */
+.voice-play .btn.is-playing .ico--play {
+  width: 0.5em;
+  clip-path: polygon(0 0, 35% 0, 35% 100%, 0 100%, 0 0, 65% 0, 100% 0, 100% 100%, 65% 100%, 65% 0);
+}
+
+.voice-play__bar {
+  flex: 1;
+  max-width: 260px;
+  height: 6px;
+  border: 1px solid var(--line);
+}
+
+.voice-play__bar > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--ready);
+}
+
+/* A tape with a voice note: a small green dot on the label's corner. */
+.tape--voice .tape__label {
+  position: relative;
+}
+
+.tape--voice .tape__label::after {
+  content: 'VOICE';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 0 4px;
+  background: #0b0e0c;
+  color: var(--ready);
+  font-size: 0.75em;
+  letter-spacing: 0.1em;
+}
+
 /* ── Playback intro ── */
 
 .intro {

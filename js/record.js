@@ -2,6 +2,7 @@
 // (prd.md > Recording a Tape, spec.md > Record Screen).
 
 import { todayLocal, formatVcrDate, isDate } from './tapes.js';
+import { canRecord, startRecording, voiceClock, VOICE_MAX_MS } from './voice.js';
 
 const REQUIRED = ['project', 'returnDate', 'firstStep'];
 const TEXT_FIELDS = ['project', 'stopped', 'firstStep', 'unsure', 'why'];
@@ -13,6 +14,64 @@ export function initRecord(section, { onSave, onBack }) {
   const error = section.querySelector('[data-record-error]');
   const dateEcho = section.querySelector('[data-date-echo]');
   let clockTimer = null;
+
+  // ── Voice note: record, listen back, delete (kept until the tape is saved or the page closes) ──
+  const voiceBox = section.querySelector('[data-voice]');
+  const recBtn = section.querySelector('[data-voice-rec]');
+  const recText = section.querySelector('[data-voice-rec-text]');
+  const listenBtn = section.querySelector('[data-voice-listen]');
+  const deleteBtn = section.querySelector('[data-voice-delete]');
+  const voiceClockEl = section.querySelector('[data-voice-clock]');
+  const voiceNote = section.querySelector('[data-voice-note]');
+  let voice = null;      // { blob, ms } once recorded
+  let recording = null;  // the recording in progress
+  let listening = null;  // an Audio element while listening back
+  if (!canRecord()) {
+    recBtn.disabled = true;
+    voiceNote.textContent = 'THIS BROWSER CAN\'T RECORD SOUND HERE. THE TAPE WORKS WITHOUT IT.';
+    voiceNote.hidden = false;
+  }
+  function showVoice() {
+    const has = Boolean(voice);
+    listenBtn.hidden = !has || Boolean(recording);
+    deleteBtn.hidden = !has || Boolean(recording);
+    recText.textContent = recording ? 'STOP VOICE' : has ? 'RECORD AGAIN' : 'RECORD VOICE'; // not just STOP: the tape has its own ■ STOP
+    recBtn.classList.toggle('is-recording', Boolean(recording));
+    recBtn.setAttribute('aria-pressed', String(Boolean(recording)));
+    if (!recording) voiceClockEl.textContent = has ? voiceClock(voice.ms) : '';
+  }
+  function stopListening() {
+    listening?.pause();
+    listening = null;
+  }
+  recBtn.addEventListener('click', () => {
+    if (recording) { recording.stop(); return; }
+    stopListening();
+    voiceNote.hidden = true;
+    recording = startRecording({ onTick: (ms) => { voiceClockEl.textContent = `${voiceClock(ms)} / ${voiceClock(VOICE_MAX_MS)}`; } });
+    showVoice();
+    recording.done.then((result) => {
+      voice = result.ms >= 500 ? result : voice; // a slip of the finger isn't a note
+    }, () => {
+      voiceNote.textContent = 'NO MICROPHONE (OR ACCESS WAS REFUSED). THE TAPE WORKS WITHOUT IT.';
+      voiceNote.hidden = false;
+    }).finally(() => { recording = null; showVoice(); });
+  });
+  listenBtn.addEventListener('click', () => {
+    if (!voice) return;
+    stopListening();
+    const url = URL.createObjectURL(voice.blob);
+    listening = new Audio(url);
+    listening.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
+    listening.play().catch(() => {});
+  });
+  deleteBtn.addEventListener('click', () => { stopListening(); voice = null; showVoice(); });
+  function clearVoice() {
+    recording?.stop();
+    stopListening();
+    voice = null;
+    showVoice();
+  }
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -53,6 +112,8 @@ export function initRecord(section, { onSave, onBack }) {
   function leave() {
     clearInterval(clockTimer);
     clockTimer = null;
+    recording?.stop(); // leaving the screen ends a recording (what was said so far is kept)
+    stopListening();
   }
 
   // Counts up from when the screen opened, like a camcorder: REC 00:00:15.
@@ -73,10 +134,14 @@ export function initRecord(section, { onSave, onBack }) {
     markMissing(missing);
     if (missing.length > 0) return;
 
-    onSave(makeTape(values));
+    if (recording) { recording.stop(); return; } // finish the recording first; STOP again saves
+    const tape = makeTape(values);
+    if (voice) tape.voiceMs = voice.ms;
+    onSave(tape, voice?.blob ?? null);
     form.reset();
     echoDate();
     markMissing([]);
+    clearVoice();
   }
 
   function readForm() {
@@ -95,6 +160,7 @@ export function initRecord(section, { onSave, onBack }) {
   // PAUSE AGAIN starts a new tape for the same project, so its name is filled in already.
   function prefill(values) {
     form.reset();
+    clearVoice();
     echoDate();
     for (const [name, value] of Object.entries(values)) if (form.elements[name]) form.elements[name].value = value;
   }

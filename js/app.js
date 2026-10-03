@@ -12,6 +12,7 @@ import { switchGlitch } from './motion.js';
 import { downloadIcs } from './ics.js';
 import { reducedMotion, highContrast, soundOn, onPrefsChange } from './prefs.js';
 import { setSound, resumeOnFirstClick, screenChange, blip, tapeIn, vcrClick } from './sound.js';
+import { saveVoice, deleteVoice } from './voice.js';
 
 // --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
 const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, erase: 0.5, blue: 1, playback: 1, backonit: 0.5 };
@@ -30,9 +31,17 @@ let savedTape = null;
 let room = null; // the 3D room's controls, once it has started (see startRoomIfPossible)
 
 const record = initRecord(screens.record, {
-  onSave(tape) {
+  onSave(tape, voiceBlob) {
     tapes = [...tapes, tape];
     saveTapes(tapes);
+    // The voice note goes into IndexedDB; if that fails (storage full or blocked), the tape keeps
+    // its written answers and simply has no note.
+    if (voiceBlob) {
+      saveVoice(tape.id, voiceBlob).catch(() => {
+        tapes = tapes.map((t) => (t.id === tape.id ? (({ voiceMs, ...rest }) => rest)(t) : t));
+        saveTapes(tapes);
+      });
+    }
     savedTape = tape;
     screens.saved.querySelector('[data-saved-label]').textContent =
       `${tape.project} · ${formatVcrDate(tape.returnDate)}`;
@@ -116,6 +125,7 @@ function eraseNow() {
   else {
     tapes = tapes.filter((t) => t.id !== eraseTape.id);
     saveTapes(tapes);
+    deleteVoice(eraseTape.id);
   }
   eraseTape = null;
   show('shelf');
