@@ -37,17 +37,17 @@ document.fonts.load('44px VT323'); // canvas text doesn't make the browser load 
 // a phone GPU: pixel ratio capped at 1.5, no antialias (the grade pass hides the edges), a smaller sun
 // shadow map, fewer dust specks and drops, and no SVG bend on the app screen (CSS look only).
 const TOUCH = window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(pointer: fine)').matches;
-const LITE = TOUCH || params.has('lite');
+const LITE = (TOUCH || params.has('lite')) && !params.has('nolite'); // ?nolite: the full room on a phone (checks only)
 if (LITE) document.documentElement.classList.add('room-lite');
 
 // alpha: the TV glass is drawn as a see-through hole, and the app's HTML shows through it.
 const renderer = new THREE.WebGLRenderer({ antialias: !LITE, alpha: true, powerPreference: 'high-performance' });
 renderer.setClearColor(0x000000, 0);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1.25 : 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1 : 2)); // phones: one pixel per CSS pixel (still sharp at arm's length)
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = LITE ? THREE.BasicShadowMap : THREE.PCFShadowMap; // phones: one shadow sample per pixel instead of a filtered few
 renderer.shadowMap.autoUpdate = false; // redrawn only when something that casts a shadow moves (see the loop)
 renderer.domElement.className = 'room-gl';
 renderer.domElement.setAttribute('aria-hidden', 'true');
@@ -61,7 +61,17 @@ const cssScene = new THREE.Scene();
 const scene = new THREE.Scene();
 // Soft bounce light from a generic lit room (three.js's RoomEnvironment): fills the shadows and
 // gives metal something to reflect, like URP's ambient probe.
-scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const envTex = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+// Phones: no environment map. Sampling it is the most expensive part of every lit pixel on a weak phone
+// GPU (measured: ~40% of the frame); the hemisphere light is raised a little instead (ENV_FILL).
+scene.environment = LITE ? null : envTex;
+// What the environment map gave (soft light from every side) comes back on phones as one flat ambient
+// light, which costs almost nothing per pixel. Its strength follows the time of day (A.env) and was
+// tuned so the phone room matches the laptop's brightness in screenshots.
+const WHITE = new THREE.Color(0xffffff);
+let envFill = 6; // measured: 6 matches the laptop's mean brightness by day and in the afternoon
+const envAmbient = new THREE.AmbientLight(0xffffff, 0);
+if (LITE) scene.add(envAmbient);
 const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 40);
 const raycaster = new THREE.Raycaster();
 
@@ -2247,7 +2257,7 @@ let lastClothKey = '';
 let wasMoving = false;
 let liteSlow = 0;
 let liteFrames = 0;
-const LITE_MIN_PR = 0.85;
+const LITE_MIN_PR = 0.7;
 function liteSkip(now) {
   if (!LITE) return false;
   if (!params.has('uncapped') && liteLast >= 0 && now - liteLast < 1000 / 30 - 4) return true; // ?uncapped: checks only
@@ -2255,7 +2265,7 @@ function liteSkip(now) {
   liteLast = now;
   liteFrames++;
   liteSlow = liteSlow * 0.95 + (spent > 45 ? 0.05 : 0); // share of slow frames, smoothed
-  if (liteFrames > 45 && liteSlow > 0.35 && renderer.getPixelRatio() > LITE_MIN_PR + 0.01) {
+  if (!window.__room?.holdPr && liteFrames > 45 && liteSlow > 0.35 && renderer.getPixelRatio() > LITE_MIN_PR + 0.01) {
     renderer.setPixelRatio(Math.max(LITE_MIN_PR, renderer.getPixelRatio() - 0.15));
     resize();
     liteFrames = 0;
@@ -2355,6 +2365,10 @@ function roomFrame(now) {
   hemi.color.copy(C.sky);
   hemi.groundColor.copy(C.ground);
   hemi.intensity = A.hemiI * (0.6 + 0.4 * co);
+  if (LITE) { // night needs a little more
+    envAmbient.intensity = A.env * envFill * (1 + 0.45 * A.night) * (0.6 + 0.4 * co);
+    envAmbient.color.copy(C.sky).lerp(WHITE, 0.5);
+  }
   scene.environmentIntensity = A.env * (0.6 + 0.4 * co);
   glowMat.color.copy(C.glow);
   glowMat.opacity = A.glowO * (0.35 + 0.65 * co) * WEATHER[seasonName()].glare * (1 - 0.6 * rainShown); // pale pictures (snow, haze) get less glare
@@ -2634,8 +2648,23 @@ window.__room = {
     return out;
   },
   drawnCount: () => drawnFrames,
+  setPr: (v) => { renderer.setPixelRatio(v); resize(); },
+  setEnv: (on) => { scene.environment = on ? envTex : null; },
+  look: () => ({ env: !!scene.environment, hemi: hemi.intensity, amb: envAmbient.intensity, pr: renderer.getPixelRatio() }),
+  setFill: (v) => { envFill = v; },
+  toLambert: () => { // checks only: what plain diffuse shading would save
+    const done = new Map();
+    scene.traverse((o) => {
+      if (!o.isMesh || !o.material?.isMeshStandardMaterial) return;
+      const m = o.material;
+      if (!done.has(m)) done.set(m, new THREE.MeshLambertMaterial({ color: m.color, map: m.map, emissive: m.emissive, emissiveIntensity: m.emissiveIntensity, side: m.side, transparent: m.transparent, opacity: m.opacity }));
+      o.material = done.get(m);
+    });
+    return done.size;
+  },
   cpuMs: () => cpuMs,
   merged: () => mergeInfo,
+  lambert: () => lambertCount,
   scene: () => scene,
   info: () => { let meshes = 0, castS = 0; scene.traverseVisible((o) => { if (o.isMesh || o.isLine || o.isPoints || o.isSprite) { meshes++; if (o.castShadow) castS++; } }); return { meshes, castShadow: castS, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, programs: renderer.info.programs.length, textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries, pr: renderer.getPixelRatio(), size: [renderer.domElement.width, renderer.domElement.height] }; },
   lite: () => ({ lite: LITE, touch: TOUCH, pr: renderer.getPixelRatio(), shadow: sun.shadow.mapSize.x, dust: DUST_N }),
@@ -2890,6 +2919,29 @@ function mergeStatic() {
   return { before, after, skipped: why };
 }
 const mergeInfo = LITE && !params.has('nomerge') ? mergeStatic() : null;
+// Phones: matte (Lambert) shading instead of the physically based one, like URP Simple Lit instead of
+// Lit. The room is matte and cartoon-like, so it looks nearly the same, and each pixel costs less.
+// The materials the loop changes (lamp shade, curtain glow, VCR, photo) are swapped in place: the same
+// objects stay referenced, only their shading model changes.
+function toLambertInPlace() {
+  const swap = new Map();
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.material?.isMeshStandardMaterial) return;
+    const m = o.material;
+    if (!swap.has(m)) {
+      const l = new THREE.MeshLambertMaterial({ color: m.color, map: m.map, emissive: m.emissive, emissiveIntensity: m.emissiveIntensity,
+        side: m.side, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite, alphaTest: m.alphaTest, vertexColors: m.vertexColors });
+      l.color = m.color; l.emissive = m.emissive; // shared Color objects: the loop's changes reach the new material
+      Object.defineProperty(m, 'emissiveIntensity', { get: () => l.emissiveIntensity, set: (v) => { l.emissiveIntensity = v; } });
+      Object.defineProperty(m, 'opacity', { get: () => l.opacity, set: (v) => { l.opacity = v; } });
+      Object.defineProperty(m, 'map', { get: () => l.map, set: (v) => { l.map = v; l.needsUpdate = true; } });
+      swap.set(m, l);
+    }
+    o.material = swap.get(m);
+  });
+  return swap.size;
+}
+const lambertCount = LITE && !params.has('pbr') ? toLambertInPlace() : 0;
 
 // Resolves when every room picture has arrived (or failed: the room works without them), and reports
 // progress on the way: onProgress(loaded, total).
