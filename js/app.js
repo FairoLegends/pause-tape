@@ -248,6 +248,21 @@ onPrefsChange(syncSoundButton);
 syncSoundButton();
 resumeOnFirstClick();
 
+// ?sounddebug: a small line at the bottom showing the audio state, so a sound problem on a real phone
+// can be read off the screen (there's no developer console on a phone).
+if (new URLSearchParams(location.search).has('sounddebug')) {
+  const line = document.createElement('div');
+  line.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99;padding:4px 8px;background:#000c;color:#62ff8f;font:14px monospace;pointer-events:none';
+  document.body.append(line);
+  let taps = 0;
+  window.addEventListener('pointerup', () => { taps++; }, { capture: true });
+  import('./sound.js').then((m) => setInterval(() => {
+    const s = m.soundState();
+    const n = Object.values(s.played).reduce((x, v) => x + v, 0);
+    line.textContent = `AUDIO ${s.ctx} · SOUND ${s.on ? 'ON' : 'OFF'} · MUSIC ${s.music ? 'ON' : 'OFF'} · LEVEL ${s.gain.toFixed(2)} · STARTED ${s.started ? 'YES' : 'NO'} · EFFECTS ${n} · TAPS ${taps}`;
+  }, 300));
+}
+
 // The room around the TV (prd.md > The room around the TV): a laptop or desktop window with WebGL.
 // On a phone, or if anything fails, the app stays the flat TV above, which works on its own.
 // While the room loads, a VCR-style loading screen shows how far along it is and roughly how long

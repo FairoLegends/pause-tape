@@ -566,7 +566,11 @@ export async function setSound(on) {
   if (on) {
     setup();
     if (!ctx) return false;
-    await ctx.resume();
+    // Inside the tap itself: a silent one-sample sound unlocks audio on mobile browsers, which only
+    // count sound that starts in the gesture's own call stack (an await before it is too late).
+    try { const s = ctx.createBufferSource(); s.buffer = ctx.createBuffer(1, 1, 22050); s.connect(ctx.destination); s.start(0); } catch { /* old browser */ }
+    // resume() can hang on a phone when the gesture didn't count; don't wait on it forever.
+    await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 600))]);
     if (!started) {
       started = true;
       startRain();
@@ -586,19 +590,40 @@ export async function setSound(on) {
 export async function setMusic(on) {
   setPref('music', on);
   if (on && !soundOn()) await setSound(true);
-  else if (!ctx) await setSound(soundOn());
+  else if (!ctx || ctx.state !== 'running') await setSound(soundOn()); // also wakes audio a phone left suspended
   if (musicBus) musicBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.3);
   return on;
 }
 
-// Sound starts at the first click or key anywhere (browsers block it before one), unless the
+// Sound starts at the first tap, click or key anywhere (browsers block it before one), unless the
 // player turned SOUND off.
-export function resumeOnFirstClick(onStart = () => {}) {
+// Phones (learner report: no sound at all on an Android phone): on a touch screen the browser only
+// lets audio start from the END of a tap (pointerup / touchend / click), not from pointerdown, so an
+// AudioContext woken on pointerdown stays silently "suspended". Every kind of gesture is listened to
+// until the audio really runs. Android and iOS also suspend the audio when the browser goes to the
+// background; the next tap after coming back wakes it again.
+const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+let onStarted = () => {};
+let firstDone = false;
+function wake() {
   if (!soundOn()) return;
-  const go = () => { setSound(true).then(onStart); };
-  window.addEventListener('pointerdown', go, { once: true, capture: true });
-  window.addEventListener('keydown', go, { once: true, capture: true });
+  if (ctx && ctx.state === 'running' && started) return;
+  setSound(true).then(() => {
+    if (ctx?.state === 'running' && !firstDone) { firstDone = true; onStarted(); }
+  }).catch(() => {});
 }
+export function resumeOnFirstClick(onStart = () => {}) {
+  onStarted = onStart;
+  for (const ev of GESTURES) window.addEventListener(ev, wake, { capture: true, passive: true });
+}
+// iOS reports 'interrupted' after a call or the lock screen; both come back on the next gesture.
+if (globalThis.document) {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running' && soundOn()) ctx.resume().catch(() => {});
+  });
+}
+// Checks only: what the browser does when the page goes to the background.
+export const __suspendForCheck = () => ctx?.suspend();
 
 export const soundState = () => ({ music: musicOn(), musicGain: musicBus?.gain.value ?? null, on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played }, season, seasonNodes: seasonNodes.length, rain: rainOn(), rainGain: rainBus?.gain.value ?? null });
 export { lofiTimer, tickTimer };
