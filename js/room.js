@@ -17,6 +17,7 @@ import { OutputPass } from '../assets/vendor/addons/postprocessing/OutputPass.js
 import { reducedMotion, highContrast, soundOn, setPref, onPrefsChange } from './prefs.js';
 import { visibleTapes } from './store.js';
 import { setSeasonSound, setRain, rainOn } from './sound.js';
+import { tapeOut } from './sound.js';
 import { setSound, vcrClick, tapeIn, staticBurst, soundState, lampSwitch, curtainSlide } from './sound.js';
 
 const stage = document.querySelector('[data-room-stage]');
@@ -1679,6 +1680,16 @@ function drawPicture(t) {
     g.font = '30px VT323, monospace';
     g.textAlign = 'center';
     if (Math.floor(t * 1.2) % 2 === 0) g.fillText('PRESS THE VCR', w / 2, h * 0.76);
+  } else if (tvMode === 'eject') {
+    // EJECT on a blue screen, as a VCR shows it.
+    g.fillStyle = '#1f3cff';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffffff';
+    g.font = '64px VT323, monospace';
+    g.textAlign = 'center';
+    g.fillText('EJECT', w / 2, h * 0.5);
+    g.font = '40px VT323, monospace';
+    if (playing) g.fillText(playing, w / 2, h * 0.64);
   } else if (tvMode === 'insert') {
     // The VCR is taking the tape: the picture drops to snow with a rolling bar.
     g.fillStyle = '#0a0c12';
@@ -1808,11 +1819,15 @@ function updateHoverLabel() {
 }
 const HINT_STANDBY = 'VCR · CURTAIN · LAMP · PHOTO';
 
+// eject (a tape was in: STOP, BACK TO THE ROOM or the end of a replay brings the camera back out to the
+// VCR, the cassette slides out and lifts away, then the room) is the reverse of insert.
 // TV modes: standby (the room; the TV shows PRESS THE VCR) -> app (VCR clicked: the camera goes into
 // the TV and the real app takes over the glass) -> insert (a tape is played: the camera pulls back, the
 // cassette slides into the VCR) -> loading (the app's blue screen, about 3 s) -> play (the camera eases
 // back into the TV for the replay). BACK TO THE ROOM or Escape returns to the room from any of them.
-const SEQ = { insert: 1.5, slideFrom: 0.55, slideTo: 1.35 };
+const SEQ = { insert: 1.5, slideFrom: 0.55, slideTo: 1.35, eject: 2.2, outFrom: 0.65, outTo: 1.3 };
+let ejectThen = 'standby'; // where the camera goes after an eject: the room, or back into the TV (app)
+let loaded = null; // the project name of the tape inside the VCR (null = empty), so it can be ejected
 let seqT = 0; // seconds in the current mode
 let playing = null; // the project name on the tape going in
 let afterInsert = null; // starts the app's playback once the cassette is in
@@ -1852,17 +1867,27 @@ function setMode(m) {
   hint.classList.toggle('is-button', !inRoom);
   document.body.classList.toggle('zoomed', !inRoom);
   setAppLive(false);
-  startCut(m === 'standby' || m === 'insert'); // the canvas picture covers the glass in the room and while the tape goes in
+  startCut(m === 'standby' || m === 'insert' || m === 'eject'); // the canvas picture covers the glass in the room and while the tape goes in or out
   if (m === 'standby') {
-    goTo(wide);
+    if (was !== 'eject') goTo(wide);
     cassette.visible = false;
     playing = null;
     afterInsert = null;
     status = tapeStatus();
-    if (was !== 'standby') hooks.onLeave?.();
+    if (was !== 'standby' && was !== 'eject') hooks.onLeave?.();
+  }
+  if (m === 'eject') {
+    // Out to the VCR, the tape comes out and lifts away, then on to the room view or back into the TV.
+    goTo(POSES.insert, reduced.matches ? 0.01 : 0.9);
+    playing = loaded;
+    loaded = null;
+    cassette.visible = true;
+    cassette.position.set(-0.06, 0.06, 0.1); // just inside the slot
+    if (ejectThen === 'standby') hooks.onLeave?.();
+    tapeOut();
   }
   if (m === 'app' && was !== 'play') goTo(POSES.screen);
-  if (m === 'insert') { goTo(POSES.insert, 1.0); cassette.visible = true; cassette.position.z = 0.42; tapeIn(); }
+  if (m === 'insert') { goTo(POSES.insert, 1.0); cassette.visible = true; cassette.position.set(-0.06, 0.06, 0.42); tapeIn(); }
   if (m === 'play') goTo(POSES.screen, 1.4, easeIn);
 }
 function toggleTv() {
@@ -1921,10 +1946,17 @@ stage.addEventListener('click', (e) => {
   const o = clickableAt(...ndcOf(e));
   if (o) o.userData.click();
 });
-hint.addEventListener('click', () => { if (tvMode !== 'standby') setMode('standby'); });
+// Leaving the TV: with a tape in the VCR it comes out first (eject), otherwise straight to the room.
+function leaveTv() {
+  if (tvMode === 'standby' || tvMode === 'insert') return;
+  if (tvMode === 'eject') { ejectThen = 'standby'; return; } // already ejecting: go on to the room after
+  ejectThen = 'standby';
+  setMode(loaded ? 'eject' : 'standby');
+}
+hint.addEventListener('click', leaveTv);
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !howPanel.hidden) { howPanel.hidden = true; return; }
-  if (e.key === 'Escape' && tvMode !== 'standby' && photoPanel.hidden) setMode('standby');
+  if (e.key === 'Escape' && tvMode !== 'standby' && photoPanel.hidden) leaveTv();
 });
 
 // ── Panel: time switch and hide ───────────────────────────────────────
@@ -2050,7 +2082,18 @@ renderer.setAnimationLoop((now) => {
     cassette.position.z = 0.42 + (0.1 - 0.42) * easeInOut(f);
     cassette.position.y = 0.06 + 0.012 * (1 - f) * (f > 0 ? 1 : 0.4);
     if (f >= 1 && cassette.visible) { cassette.visible = false; pressT = 0; } // swallowed by the VCR
-    if (seqT >= SEQ.insert) { const go = afterInsert; afterInsert = null; setMode('loading'); go?.(); }
+    if (seqT >= SEQ.insert) { const go = afterInsert; afterInsert = null; loaded = playing; setMode('loading'); go?.(); }
+  }
+  if (tvMode === 'eject') {
+    // The cassette slides out of the slot, then lifts up and away (as if taken by a hand), then the room.
+    const f = THREE.MathUtils.clamp((seqT - SEQ.outFrom) / (SEQ.outTo - SEQ.outFrom), 0, 1);
+    const lift = THREE.MathUtils.clamp((seqT - SEQ.outTo - 0.15) / 0.45, 0, 1);
+    cassette.position.z = 0.1 + (0.42 - 0.1) * easeInOut(f) + 0.12 * easeInOut(lift);
+    cassette.position.y = 0.06 + 0.012 * f + 0.25 * easeInOut(lift);
+    cassette.rotation.x = -0.5 * easeInOut(lift);
+    if (lift >= 1) cassette.visible = false;
+    if (ejectThen === 'standby' && seqT >= SEQ.outTo + 0.1 && cam.to === POSES.insert) goTo(wide, 1.1);
+    if (seqT >= SEQ.eject || reduced.matches) { cassette.rotation.x = 0; setMode(ejectThen); }
   }
   // Once the camera has arrived in the TV, the app takes clicks and typing.
   if ((tvMode === 'app' || tvMode === 'play') && cam.t >= 1 && appScreen.inert) setAppLive(true);
@@ -2341,7 +2384,7 @@ window.__room = {
   status: () => status,
   getMode: () => tvMode,
   live: () => !appScreen.inert,
-  seq: () => ({ mode: tvMode, t: seqT, cassette: cassette.visible, cassetteZ: cassette.position.z, close, camT: cam.t, playing, cover: cutT < CUT_FREEZE + CUT_TEAR ? 0.5 : covered ? 1 : 0 }),
+  seq: () => ({ loaded, ejectThen, rotX: cassette.rotation.x, cassetteY: cassette.position.y, mode: tvMode, t: seqT, cassette: cassette.visible, cassetteZ: cassette.position.z, close, camT: cam.t, playing, cover: cutT < CUT_FREEZE + CUT_TEAR ? 0.5 : covered ? 1 : 0 }),
   cut: () => ({ t: cutT, dir: cutDir, covered, visible: standby.visible }),
   // Hold the cut at a fixed time, for screenshots (null lets it run again).
   holdCut: (sec) => { cutHold = sec; },
@@ -2473,7 +2516,14 @@ export function startRoom({ onLeave } = {}) {
     // The app's blue loading screen is over and the replay begins: ease into the TV.
     loadingDone() { if (tvMode === 'loading') setMode('play'); },
     enterTv() { if (tvMode === 'standby') setMode('app'); },
-    toRoom() { if (tvMode !== 'standby') setMode('standby'); },
+    toRoom() { leaveTv(); },
+    // The app's playback ended (STOP, or leaving the BACK ON IT screen): the camera pulls back, the
+    // VCR ejects the tape, and the camera goes back into the TV, where the shelf is.
+    tapeDone() {
+      if (!loaded || tvMode === 'standby' || tvMode === 'eject' || tvMode === 'insert') return;
+      ejectThen = 'app';
+      setMode('eject');
+    },
     mode: () => tvMode,
   };
 }
@@ -2494,14 +2544,24 @@ export function setupCrtBend() {
 
 // Resolves when every room picture has arrived (or failed: the room works without them), and reports
 // progress on the way: onProgress(loaded, total).
+// Only the first load reports: pictures loaded later (another season) must not bring the loading
+// screen back, which left it stuck over the room after a season change.
 export function roomReady(onProgress = () => {}) {
   return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      load.listeners = load.listeners.filter((fn) => fn !== report);
+      resolve();
+    };
     const report = () => {
+      if (done) return;
       onProgress(load.done, load.total);
-      if (load.total && load.done >= load.total) resolve();
+      if (load.total && load.done >= load.total) finish();
     };
     load.listeners.push(report);
     report();
-    setTimeout(resolve, 8000); // never hold the app back for long
+    setTimeout(finish, 8000); // never hold the app back for long
   });
 }

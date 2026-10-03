@@ -371,6 +371,42 @@ export function tapeIn({ delay = 0.5, scale = 1 } = {}) {
   hit(T(1.7), { f: 1300, q: 7, v: 0.14, dur: 0.035 });
 }
 
+// Eject: the motor whirrs the tray up, a clunk, then the cassette slides out with a plastic scrape.
+export function tapeOut() {
+  if (!live()) return;
+  played.tapeOut = (played.tapeOut ?? 0) + 1;
+  const t = ctx.currentTime;
+  hit(t, { f: 1500, q: 7, v: 0.3, dur: 0.04 }); // the EJECT button
+  const motor = ctx.createOscillator();
+  motor.type = 'sawtooth';
+  motor.frequency.setValueAtTime(110, t + 0.05);
+  motor.frequency.linearRampToValueAtTime(70, t + 0.55);
+  const mlp = ctx.createBiquadFilter();
+  mlp.type = 'lowpass';
+  mlp.frequency.value = 400;
+  const mg = ctx.createGain();
+  mg.gain.setValueAtTime(0.0001, t + 0.05);
+  mg.gain.linearRampToValueAtTime(0.06, t + 0.15);
+  mg.gain.linearRampToValueAtTime(0.0001, t + 0.6);
+  motor.connect(mlp).connect(mg).connect(effects);
+  motor.start(t + 0.05);
+  motor.stop(t + 0.65);
+  tone(t + 0.6, { f: 140, to: 70, v: 0.25, dur: 0.16 }); // the tray unlocks
+  hit(t + 0.61, { f: 800, q: 3, v: 0.2, dur: 0.06 });
+  const src = ctx.createBufferSource(); // the cassette sliding out
+  src.buffer = noiseBuffer;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(2200, t + 0.7);
+  bp.frequency.linearRampToValueAtTime(900, t + 1.25);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t + 0.7);
+  g.gain.linearRampToValueAtTime(0.16, t + 0.78);
+  g.gain.linearRampToValueAtTime(0.0001, t + 1.3);
+  src.connect(bp).connect(g).connect(effects);
+  src.start(t + 0.7, 0, 0.7);
+}
+
 // The blue loading screen: the VCR's motor and spinning head hum while the tape is read, a soft tick
 // as each of the 20 blocks lights (the same timing as motion.js loadBar), and a clunk at the end.
 export function loadingWhirr(seconds) {

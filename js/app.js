@@ -74,7 +74,10 @@ const playback = initPlayback(screens, {
 // enter()/leave() hooks, like OnEnable/OnDisable.
 const hooks = { record };
 
+const TAPE_SCREENS = new Set(['blue', 'playback', 'backonit']);
 function show(name, { force = false } = {}) {
+  // The tape's part is over (STOP, or on from BACK ON IT): in the room the VCR ejects it.
+  if (room && TAPE_SCREENS.has(current) && !TAPE_SCREENS.has(name)) room.tapeDone();
   // In the room: the blue screen is up and the replay begins, so the camera eases into the TV.
   if (room && name === 'playback') room.loadingDone();
   hooks[current]?.leave();
@@ -245,7 +248,9 @@ resumeOnFirstClick();
 // While the room loads, a VCR-style loading screen shows how far along it is and roughly how long
 // is left (from the speed so far), so a slow connection never looks frozen.
 const loading = document.querySelector('[data-room-loading]');
+let roomLoaded = false;
 function showLoading(fraction, startedAt) {
+  if (roomLoaded) return; // the room is up: nothing may bring this screen back
   loading.hidden = false;
   const pct = Math.round(fraction * 100);
   loading.querySelector('[data-room-loading-pct]').textContent = `${pct}%`;
@@ -285,6 +290,7 @@ async function startRoomIfPossible() {
     room = mod.startRoom({ onLeave: () => show('shelf', { force: true }) });
     mod.setupCrtBend();
     document.documentElement.classList.add('has-room');
+    roomLoaded = true;
     loading.classList.add('is-done'); // fades out (0.5 s) and lets clicks through right away
     setTimeout(() => { loading.hidden = true; loading.classList.remove('is-done'); }, 600);
   } catch (err) {
