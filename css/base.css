@@ -483,6 +483,116 @@ body {
   text-shadow: 0 0 8px rgba(255, 59, 59, 0.6);
 }
 
+/* ── Shelf extras: stat line, sample badge, eject (erase), backup ── */
+
+.shelf-stats {
+  margin: 0 0 10px;
+  color: var(--ready);
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 6px rgba(98, 255, 143, 0.4);
+}
+
+.tape-slot {
+  position: relative;
+  display: grid;
+  min-width: 0; /* a grid cell: let it shrink to the column, like the tapes did before */
+}
+
+.tape-slot > .tape {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Eject: a small square button on the cassette's top-right corner. */
+.tape__eject {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #3a3f4a;
+  border-radius: 6px;
+  background: #0c0e12;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.tape__eject:hover,
+.tape__eject:focus-visible {
+  border-color: var(--rec);
+  color: var(--rec);
+  outline: none;
+}
+
+/* ⏏ drawn in CSS (VT323 has no eject glyph): a triangle over a bar. */
+.ico--eject {
+  position: relative;
+  width: 14px;
+  height: 13px;
+}
+
+.ico--eject::before,
+.ico--eject::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 14px;
+  background: currentColor;
+}
+
+.ico--eject::before {
+  top: 0;
+  height: 8px;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.ico--eject::after {
+  bottom: 0;
+  height: 3px;
+}
+
+/* The label leaves room for the eject button. */
+.tape-slot .tape__label {
+  margin-right: 34px;
+}
+
+.tape__sample {
+  align-self: flex-start;
+  padding: 0 5px;
+  background: #1a1a1e;
+  color: #d3cdbd;
+  font-size: 0.8em;
+  letter-spacing: 0.12em;
+}
+
+.osd--shelf {
+  align-items: center;
+  gap: 10px;
+}
+
+.osd__spacer {
+  flex: 1;
+}
+
+.backup-note {
+  margin: 0;
+  color: var(--ink-dim);
+  letter-spacing: 0.06em;
+}
+
+/* ── Playback intro ── */
+
+.intro {
+  margin: 0 6px 8px;
+  padding: 4px 12px;
+  border-left: 2px solid var(--ready);
+  color: var(--ready);
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 6px rgba(98, 255, 143, 0.4);
+}
+
 /* ── Tape Saved Screen ────────────────────────────────────────── */
 
 .saved {
@@ -834,6 +944,17 @@ body {
   .btn,
   .tape {
     min-height: 44px;
+  }
+
+  .tape__eject {
+    top: 2px;
+    right: 2px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .tape-slot .tape__label {
+    margin-right: 42px;
   }
 }
 

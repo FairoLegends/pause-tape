@@ -15,6 +15,7 @@ import { RenderPass } from '../assets/vendor/addons/postprocessing/RenderPass.js
 import { ShaderPass } from '../assets/vendor/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from '../assets/vendor/addons/postprocessing/OutputPass.js';
 import { reducedMotion, highContrast, soundOn, setPref, onPrefsChange } from './prefs.js';
+import { visibleTapes } from './store.js';
 import { setSound, vcrClick, tapeIn, staticBurst, soundState, lampSwitch, curtainSlide } from './sound.js';
 
 const stage = document.querySelector('[data-room-stage]');
@@ -1492,6 +1493,8 @@ const KEY = 'pausetape.tapes.v1'; // the app's own storage key, so the mockup sh
 function tapeStatus() {
   let tapes = [];
   try { tapes = JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { tapes = []; }
+  if (!Array.isArray(tapes)) tapes = [];
+  tapes = visibleTapes(tapes); // the sample tape counts too, so the VCR glows on a first visit
   const d = new Date();
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const ready = tapes.filter((t) => t && t.backOnItMinutes == null && t.returnDate <= today).length;

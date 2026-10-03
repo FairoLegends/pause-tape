@@ -25,11 +25,17 @@
           <span class="osd__title">PAUSE TAPE</span>
           <span class="osd__stamp" data-shelf-stamp></span>
         </header>
+        <p class="shelf-stats" data-shelf-stats hidden></p>
         <div class="shelf" data-shelf></div>
-        <footer class="osd osd--bottom">
+        <footer class="osd osd--bottom osd--shelf">
           <button class="btn btn--rec" type="button" data-action="rec">
             <span class="ico ico--rec" aria-hidden="true"></span>REC
           </button>
+          <p class="backup-note" data-backup-note role="status" hidden></p>
+          <span class="osd__spacer"></span>
+          <button class="btn btn--quiet" type="button" data-action="backup">BACKUP</button>
+          <button class="btn btn--quiet" type="button" data-action="restore">RESTORE</button>
+          <input type="file" accept=".json,application/json" data-restore-file hidden>
         </footer>
       </section>
 
@@ -117,6 +123,18 @@
         </div>
       </section>
 
+      <!-- Erase Confirmation: the eject button on a tape (prd.md > Erasing a Tape) -->
+      <section class="screen screen--erase" data-screen="erase" aria-label="Erase tape?" hidden>
+        <div class="saved">
+          <p class="early__text" data-erase-text></p>
+          <p class="saved__label">THIS CAN'T BE UNDONE.</p>
+          <div class="saved__actions">
+            <button class="btn btn--rec" type="button" data-action="erase-confirm">ERASE</button>
+            <button class="btn" type="button" data-action="erase-cancel">CANCEL</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Blue VCR Screen: the brief transition when a tape is played (prd.md > Playback) -->
       <section class="screen screen--blue" data-screen="blue" aria-label="Loading tape" hidden>
         <p class="blue__play"><span class="ico ico--play" aria-hidden="true"></span>PLAY</p>
@@ -129,6 +147,7 @@
           <span class="osd__play"><span class="ico ico--play" aria-hidden="true"></span>PLAY <span data-play-counter>0:00:00</span></span>
           <span class="osd__stamp" data-play-title></span>
         </header>
+        <p class="intro" data-intro hidden></p>
         <ol class="answers" data-answers aria-live="polite"></ol>
         <div class="first" data-first-step hidden>
           <span class="answer__label">FIRST STEP WHEN I COME BACK</span>
@@ -153,6 +172,12 @@
         <div class="saved">
           <p class="saved__title backonit__text" data-backonit-text></p>
           <p class="saved__label" data-backonit-label></p>
+          <div class="saved__actions">
+            <button class="btn btn--rec" type="button" data-action="pause-again">
+              <span class="ico ico--rec" aria-hidden="true"></span>PAUSE AGAIN
+            </button>
+            <button class="btn" type="button" data-action="backonit-shelf">BACK TO SHELF</button>
+          </div>
         </div>
       </section>
 

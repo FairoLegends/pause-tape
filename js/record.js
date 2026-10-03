@@ -47,7 +47,7 @@ export function initRecord(section, { onSave, onBack }) {
     const startedAt = Date.now();
     tick(startedAt);
     clockTimer = setInterval(() => tick(startedAt), 1000);
-    form.elements.project.focus({ preventScroll: true }); // the screen is already in view; in the room, scrolling would shift the 3D layer
+    (form.elements.project.value ? form.elements.returnDate : form.elements.project).focus({ preventScroll: true }); // the screen is already in view; in the room, scrolling would shift the 3D layer
   }
 
   function leave() {
@@ -92,7 +92,14 @@ export function initRecord(section, { onSave, onBack }) {
     error.hidden = names.length === 0;
   }
 
-  return { enter, leave };
+  // PAUSE AGAIN starts a new tape for the same project, so its name is filled in already.
+  function prefill(values) {
+    form.reset();
+    echoDate();
+    for (const [name, value] of Object.entries(values)) if (form.elements[name]) form.elements[name].value = value;
+  }
+
+  return { enter, leave, prefill };
 }
 
 // The shape saved in localStorage (spec.md > Data Model).

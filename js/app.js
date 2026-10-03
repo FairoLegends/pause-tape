@@ -2,8 +2,8 @@
 // SetActive) and sets the VHS strength for each screen, the way VHSDriver sets a float
 // on the fullscreen material (spec.md > Screen Switcher).
 
-import { loadTapes, saveTapes } from './store.js';
-import { todayLocal, formatVcrDate } from './tapes.js';
+import { loadTapes, saveTapes, visibleTapes, eraseSample, buildBackup, parseBackup, mergeTapes } from './store.js';
+import { todayLocal, formatVcrDate, backOnItStats } from './tapes.js';
 import { renderShelf } from './shelf.js';
 import { initRecord } from './record.js';
 import { initPlayback, PACE } from './playback.js';
@@ -14,7 +14,7 @@ import { reducedMotion, highContrast, soundOn, onPrefsChange } from './prefs.js'
 import { setSound, resumeOnFirstClick, screenChange, blip, tapeIn, vcrClick } from './sound.js';
 
 // --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
-const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, blue: 1, playback: 1, backonit: 0.5 };
+const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, erase: 0.5, blue: 1, playback: 1, backonit: 0.5 };
 
 const screens = Object.fromEntries(
   [...document.querySelectorAll('[data-screen]')].map((section) => [section.dataset.screen, section]),
@@ -23,6 +23,8 @@ const screens = Object.fromEntries(
 let tapes = loadTapes();
 let current = null;
 let earlyTape = null;
+let eraseTape = null;
+let lastPlayed = null; // the tape just finished, for PAUSE AGAIN
 let backOnItTimer = null;
 let savedTape = null;
 let room = null; // the 3D room's controls, once it has started (see startRoomIfPossible)
@@ -44,10 +46,14 @@ const playback = initPlayback(screens, {
   show,
   // The only place minutes are written, and only once (spec.md > Data Model).
   onBackOnIt(tape, minutes) {
-    tapes = tapes.map((t) => (t.id === tape.id && t.backOnItMinutes == null
-      ? { ...t, backOnItMinutes: minutes, completedAt: new Date().toISOString() }
-      : t));
-    saveTapes(tapes);
+    // The sample tape is never saved, so it stays READY for the next visitor.
+    if (!tape.sample) {
+      tapes = tapes.map((t) => (t.id === tape.id && t.backOnItMinutes == null
+        ? { ...t, backOnItMinutes: minutes, completedAt: new Date().toISOString() }
+        : t));
+      saveTapes(tapes);
+    }
+    lastPlayed = tape;
     screens.backonit.querySelector('[data-backonit-text]').textContent = `BACK ON IT · ${minutes} MIN`;
     screens.backonit.querySelector('[data-backonit-label]').textContent = tape.project;
     show('backonit');
@@ -85,10 +91,34 @@ function show(name, { force = false } = {}) {
 function drawShelf() {
   const today = todayLocal();
   screens.shelf.querySelector('[data-shelf-stamp]').textContent = formatVcrDate(today);
-  renderShelf(screens.shelf.querySelector('[data-shelf]'), tapes, today, {
+  renderShelf(screens.shelf.querySelector('[data-shelf]'), visibleTapes(tapes, today), today, {
     onRecord: () => show('record'),
     onSelect: selectTape,
+    onErase: askErase,
   });
+  // Above the shelf: how fast the player has got going again, on average.
+  const stats = backOnItStats(tapes);
+  const line = screens.shelf.querySelector('[data-shelf-stats]');
+  line.hidden = !stats;
+  if (stats) line.textContent = `AVERAGE BACK ON IT · ${stats.avg} MIN · ${stats.count} ${stats.count === 1 ? 'TAPE' : 'TAPES'}`;
+}
+
+// ⏏ on a tape: erase it for good, after a confirmation screen.
+function askErase(tape) {
+  eraseTape = tape;
+  const line = (text) => Object.assign(document.createElement('span'), { className: 'early__line', textContent: text });
+  screens.erase.querySelector('[data-erase-text]').replaceChildren(line(`ERASE ${tape.project.toUpperCase()}?`));
+  show('erase');
+}
+function eraseNow() {
+  if (!eraseTape) return;
+  if (eraseTape.sample) eraseSample();
+  else {
+    tapes = tapes.filter((t) => t.id !== eraseTape.id);
+    saveTapes(tapes);
+  }
+  eraseTape = null;
+  show('shelf');
 }
 
 // In the room a tape goes into the VCR first; the app's playback starts once it is in.
@@ -129,8 +159,53 @@ document.querySelector('[data-action="add-calendar"]').addEventListener('click',
 });
 document.querySelector('[data-action="early-play"]').addEventListener('click', () => play(earlyTape, 'return'));
 document.querySelector('[data-action="early-cancel"]').addEventListener('click', () => show('shelf'));
-// BACK ON IT returns by itself after a few seconds, or right away when tapped.
-screens.backonit.addEventListener('click', () => show('shelf'));
+// BACK ON IT returns by itself after a few seconds, or right away when tapped. Pointing at or
+// focusing its buttons holds it there, so PAUSE AGAIN can be pressed without a rush.
+screens.backonit.addEventListener('click', (e) => { if (!e.target.closest('button')) show('shelf'); });
+const holdBackOnIt = () => clearTimeout(backOnItTimer);
+screens.backonit.querySelector('.saved__actions').addEventListener('pointerenter', holdBackOnIt);
+screens.backonit.querySelector('.saved__actions').addEventListener('focusin', holdBackOnIt);
+document.querySelector('[data-action="backonit-shelf"]').addEventListener('click', () => show('shelf'));
+// PAUSE AGAIN: record a new tape for the same project, its name filled in.
+document.querySelector('[data-action="pause-again"]').addEventListener('click', () => {
+  record.prefill({ project: lastPlayed?.project ?? '' });
+  show('record', { keep: true });
+});
+document.querySelector('[data-action="erase-confirm"]').addEventListener('click', eraseNow);
+document.querySelector('[data-action="erase-cancel"]').addEventListener('click', () => { eraseTape = null; show('shelf'); });
+
+// BACKUP saves the tapes as a .json file (not the photo); RESTORE adds the tapes from one.
+const backupNote = screens.shelf.querySelector('[data-backup-note]');
+function note(text) {
+  backupNote.textContent = text;
+  backupNote.hidden = false;
+  clearTimeout(note.timer);
+  note.timer = setTimeout(() => { backupNote.hidden = true; }, 5000);
+}
+document.querySelector('[data-action="backup"]').addEventListener('click', () => {
+  const blob = new Blob([buildBackup(tapes)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), { href: url, download: `pause-tape-backup-${todayLocal()}.json` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  note(`SAVED ${tapes.length} ${tapes.length === 1 ? 'TAPE' : 'TAPES'}`);
+});
+const restoreFile = document.querySelector('[data-restore-file]');
+document.querySelector('[data-action="restore"]').addEventListener('click', () => restoreFile.click());
+restoreFile.addEventListener('change', async () => {
+  const file = restoreFile.files[0];
+  restoreFile.value = '';
+  if (!file) return;
+  const incoming = parseBackup(await file.text());
+  if (!incoming) { note('NOT A PAUSE TAPE BACKUP'); return; }
+  const merged = mergeTapes(tapes, incoming);
+  tapes = merged.list;
+  saveTapes(tapes);
+  drawShelf();
+  note(merged.added ? `RESTORED ${merged.added} ${merged.added === 1 ? 'TAPE' : 'TAPES'}` : 'NOTHING NEW IN THAT BACKUP');
+});
 
 // The shader layer starts once; if WebGL isn't available the CSS layer keeps working.
 

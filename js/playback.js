@@ -2,7 +2,7 @@
 // the first-step timer, and "I'm back on it" (spec.md > Playback, spec.md > First Step Timer).
 // Nothing is saved until "I'm back on it", so closing the page mid-timer records nothing.
 
-import { formatVcrDate } from './tapes.js';
+import { formatVcrDate, introLine } from './tapes.js';
 import { tuneIn, settleIn, loadBar, nudge, killMotion } from './motion.js';
 import { loadingWhirr, blip, staticBurst, timerAlarm } from './sound.js';
 
@@ -10,6 +10,7 @@ import { loadingWhirr, blip, staticBurst, timerAlarm } from './sound.js';
 // ScriptableObject.
 export const PACE = {
   blueMs: 1200,        // blue VCR screen before the answers
+  introMs: 1600,       // the "MESSAGE FROM …" line on its own before the first answer
   gapMs: 2500,         // time between answers
   noSignalMs: 1200,    // how long an empty answer shows its blue NO SIGNAL panel
   glitchMs: 300,       // glitch class on each revealed answer (styled in css/vhs.css)
@@ -50,6 +51,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
   const counter = q('[data-play-counter]');
   const title = q('[data-play-title]');
   const list = q('[data-answers]');
+  const intro = q('[data-intro]');
   const skip = q('[data-action="skip"]');
   const firstBox = q('[data-first-step]');
   const firstText = q('[data-first-text]');
@@ -70,6 +72,9 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     session = s;
     title.textContent = `${tape.project} · ${formatVcrDate(tape.returnDate)}`;
     list.replaceChildren();
+    intro.textContent = introLine(tape);
+    intro.setAttribute('aria-label', intro.textContent);
+    intro.hidden = true;
     firstBox.hidden = true;
     timer.hidden = true;
     timer.classList.remove('timer--over');
@@ -83,7 +88,11 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
       show('playback');
       s.ticker = setInterval(() => tick(s), 250);
       tick(s);
-      next(s);
+      // The tape opens with when it was recorded, then the answers follow.
+      intro.hidden = false;
+      flash(intro);
+      tuneIn(intro);
+      later(s, PACE.introMs, () => next(s));
     });
   }
 
@@ -119,7 +128,9 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
   function revealAll(s) {
     for (const id of s.pending) clearTimeout(id);
     s.pending = [];
-    killMotion(firstText);
+    killMotion([firstText, intro]);
+    intro.textContent = introLine(s.tape);
+    intro.hidden = false;
     list.replaceChildren();
     for (const [key, label] of ANSWERS) {
       list.append(s.tape[key] ? answer(label, s.tape[key]) : noSignal(label, false));
@@ -173,7 +184,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     for (const id of session.pending) clearTimeout(id);
     clearInterval(session.ticker);
     killMotion(list.querySelectorAll('.answer, .answer__text'));
-    killMotion([firstBox, firstText]);
+    killMotion([firstBox, firstText, intro]);
     session = null;
   }
 

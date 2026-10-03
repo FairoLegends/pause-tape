@@ -3,15 +3,17 @@
 
 import { sortTapes, tapeState, daysUntil, formatVcrDate, formatDays } from './tapes.js';
 
-export function renderShelf(el, tapes, today, { onRecord, onSelect }) {
+export function renderShelf(el, tapes, today, { onRecord, onSelect, onErase }) {
   el.replaceChildren();
   if (tapes.length === 0) {
     el.append(blankTape(onRecord));
     return;
   }
   for (const tape of sortTapes(tapes, today)) {
-    el.append(cassette(tape, today, onSelect));
+    el.append(slot(cassette(tape, today, onSelect), tape, onErase));
   }
+  // Beside the sample tape, the blank one still invites the player to record their own.
+  if (tapes.every((t) => t.sample)) el.append(blankTape(onRecord));
 }
 
 function stateLine(tape, state, today) {
@@ -32,6 +34,10 @@ function cassette(tape, today, onSelect) {
   button.setAttribute('aria-label', `${tape.project}, return date ${date}, ${line}`);
 
   const label = el('span', 'tape__label');
+  if (tape.sample) {
+    button.classList.add('tape--sample');
+    label.append(el('span', 'tape__sample', 'SAMPLE'));
+  }
   label.append(
     el('span', 'tape__project', tape.project),
     el('span', 'tape__date', date),
@@ -40,6 +46,20 @@ function cassette(tape, today, onSelect) {
   button.append(label, reels());
   button.addEventListener('click', () => onSelect(tape, state));
   return button;
+}
+
+// A tape and its eject (erase) button side by side in one slot: a button can't sit inside a button.
+function slot(button, tape, onErase) {
+  const wrap = el('div', 'tape-slot');
+  const eject = el('button', 'tape__eject');
+  eject.type = 'button';
+  eject.dataset.action = 'erase';
+  eject.setAttribute('aria-label', `Erase ${tape.project}`);
+  eject.title = 'Erase this tape';
+  eject.append(el('span', 'ico ico--eject'));
+  eject.addEventListener('click', () => onErase(tape));
+  wrap.append(button, eject);
+  return wrap;
 }
 
 function blankTape(onRecord) {

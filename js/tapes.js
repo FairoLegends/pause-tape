@@ -51,3 +51,25 @@ export function formatVcrDate(date) {
 export function formatDays(n) {
   return `${n} ${n === 1 ? 'DAY' : 'DAYS'}`;
 }
+
+// The local calendar date (YYYY-MM-DD) an ISO time stamp falls on, e.g. when a tape was recorded.
+export function localDateOf(iso) {
+  return todayLocal(new Date(iso));
+}
+
+// The line that opens a playback: when the message was recorded and how long ago.
+// "MESSAGE FROM 19 SEP 2026 · 14 DAYS AGO" (TODAY / 1 DAY AGO for the short cases).
+export function introLine(tape, today = todayLocal()) {
+  const recorded = localDateOf(tape.recordedAt);
+  const n = Math.max(0, -daysUntil(recorded, today));
+  const ago = n === 0 ? 'TODAY' : `${formatDays(n)} AGO`;
+  return `MESSAGE FROM ${formatVcrDate(recorded)} · ${ago}`;
+}
+
+// The shelf's stat line: the average BACK ON IT minutes over every completed tape (null if none).
+export function backOnItStats(list) {
+  const done = list.filter((t) => t.backOnItMinutes != null);
+  if (done.length === 0) return null;
+  const avg = Math.round(done.reduce((sum, t) => sum + t.backOnItMinutes, 0) / done.length);
+  return { avg, count: done.length };
+}

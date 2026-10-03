@@ -243,18 +243,26 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - The Look and Feel above: CRT frame, scanlines varying by screen, two typefaces, status colors.
 - The room around the TV (built in the final review): a 3D room with the camera turning with the cursor, light by time of day, a clickable VCR that opens the shelf, a curtain and a lamp with a pull cord the player can use, a tape-insert and loading sequence into the VHS replay, and a photo frame that takes the player's own picture with a PHOTO panel to zoom and move it.
 
+## Core Additions (learner choices, 3 Oct 2026)
+The learner asked what could be added to the core while there is time left, and chose all of these:
+- **Sample tape for judges:** while the shelf has none of the player's own tapes, a READY tape "Pause Tape" (badge SAMPLE) sits beside the blank "Record your first tape", so a first-time visitor can play the whole loop at once. It is never saved; "I'm back on it" leaves it READY. The learner chose the name and let the agent write its four answers. It can be erased, and stays gone.
+- **Intro line when a tape plays:** "MESSAGE FROM [recorded date] · [N] DAYS AGO" (TODAY / 1 DAY AGO), on its own for a moment before the first answer.
+- **PAUSE AGAIN** on the BACK ON IT screen: a new Record Screen with the project name filled in (only the name, learner choice).
+- **Erasing a tape:** an eject button on every tape, then "ERASE [PROJECT]? THIS CAN'T BE UNDONE." with ERASE / CANCEL. Erasing is permanent (no archive shelf, learner choice).
+- **Stat line above the shelf:** "AVERAGE BACK ON IT · N MIN · N TAPES", the average over completed tapes (shown once one is completed).
+- **Backup:** BACKUP downloads the tapes as a `.json` file; RESTORE adds the tapes from such a file that aren't on the shelf yet. The photo is not included (learner choice).
+- **Timer alarm:** three soft beeps when the 10 minutes run out (with sound on).
+- **Voice note (next):** an optional spoken message of at most 40 seconds, stored in the browser's IndexedDB because localStorage is too small for audio (learner approved).
+
 ## Deferred From the POC
-- **Archiving and deleting tapes** — the learner moved these to Later; the demo doesn't need them.
+- **Archiving tapes** — the learner chose permanent erase instead (see Core Additions).
 - **Editing a saved tape** — not discussed; not needed for the demo. Record a new tape instead.
 - **Accounts and syncing across devices** — tapes live where the app is used; the demo doesn't need more.
 - **In-app notifications** — the `.ics` calendar reminder covers "come back on the date."
 
 ## Possible Later Enhancements
 From `scope.md > Later` and this interview:
-- Voice recording of the note.
 - Longer free-form extra notes.
-- A welcome message/intro when a tape starts playing.
-- Archive and delete tapes.
 
 ## Non-Goals
 - **Horror mood or heavy static** — Pause Tape should feel nostalgic, not scary.
