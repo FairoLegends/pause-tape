@@ -6,6 +6,10 @@
 
 import { soundOn, setPref, reducedMotion } from './prefs.js';
 
+// Rain is a separate switch (learner choice: only when picked), saved in this browser.
+const RAIN_KEY = 'pausetape.rain.v1';
+export function rainOn() { try { return localStorage.getItem(RAIN_KEY) === 'on'; } catch { return false; } }
+
 let ctx = null;
 let master;
 let ambience;
@@ -13,6 +17,11 @@ let effects;
 let noiseBuffer;
 let started = false;
 let lofiTimer = null;
+let rainBus = null;
+let seasonBus = null;
+let seasonTimer = null;
+let season = 'spring';
+let seasonNodes = [];
 const played = {}; // how many times each effect has played (for the checks)
 let tickTimer = null;
 
@@ -38,6 +47,9 @@ function setup() {
   effects = ctx.createGain();
   effects.gain.value = 0.8;
   effects.connect(master);
+  seasonBus = ctx.createGain();
+  seasonBus.gain.value = 1;
+  seasonBus.connect(ambience);
   noiseBuffer = makeNoise(2);
 }
 
@@ -51,16 +63,19 @@ function startRain() {
   const low = ctx.createBiquadFilter();
   low.type = 'lowpass';
   low.frequency.value = 1100;
+  rainBus = ctx.createGain();
+  rainBus.gain.value = rainOn() ? 1 : 0;
+  rainBus.connect(ambience);
   const bed = ctx.createGain();
   bed.gain.value = 0.16;
-  src.connect(low).connect(bed).connect(ambience);
+  src.connect(low).connect(bed).connect(rainBus);
   const high = ctx.createBiquadFilter();
   high.type = 'bandpass';
   high.frequency.value = 3200;
   high.Q.value = 0.7;
   const patter = ctx.createGain();
   patter.gain.value = 0.05;
-  src.connect(high).connect(patter).connect(ambience);
+  src.connect(high).connect(patter).connect(rainBus);
   const lfo = ctx.createOscillator(); // the rain swells and eases every few seconds
   lfo.frequency.value = 0.09;
   const depth = ctx.createGain();
@@ -158,6 +173,107 @@ function startLofi() {
   };
   schedule();
   lofiTimer = setInterval(schedule, 500);
+}
+
+// ── Season ambience (learner choice): snow = a soft cold wind, spring = birds, summer = cicadas
+// and crickets, dry season = a dry gusty wind with rustling leaves. All from noise and oscillators.
+function windBed(t, { f0, f1, q, v, rate }) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  src.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = f0;
+  bp.Q.value = q;
+  const g = ctx.createGain();
+  g.gain.value = v;
+  src.connect(bp).connect(g).connect(seasonBus);
+  const lfo = ctx.createOscillator(); // gusts: the wind's pitch and loudness swell slowly
+  lfo.frequency.value = rate;
+  const lf = ctx.createGain();
+  lf.gain.value = (f1 - f0) / 2;
+  lfo.connect(lf).connect(bp.frequency);
+  const lg = ctx.createGain();
+  lg.gain.value = v * 0.6;
+  lfo.connect(lg).connect(g.gain);
+  src.start(t);
+  lfo.start(t);
+  seasonNodes.push(src, lfo);
+}
+function chirp(at) { // one bird call: two to four quick falling whistles
+  const n = 2 + Math.floor(Math.random() * 3);
+  const base = 2600 + Math.random() * 1600;
+  for (let i = 0; i < n; i++) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    const t0 = at + i * (0.09 + Math.random() * 0.05);
+    o.frequency.setValueAtTime(base * 1.25, t0);
+    o.frequency.exponentialRampToValueAtTime(base * 0.8, t0 + 0.07);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.035, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.08);
+    o.connect(g).connect(seasonBus);
+    o.start(t0);
+    o.stop(t0 + 0.1);
+  }
+}
+function cicadas(t) { // a steady buzzing drone that swells, plus slow cricket chirps
+  const o = ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.value = 4200;
+  const am = ctx.createOscillator(); // the fast pulsing of the buzz
+  am.frequency.value = 38;
+  const amg = ctx.createGain();
+  amg.gain.value = 0.5;
+  const g = ctx.createGain();
+  g.gain.value = 0.5;
+  am.connect(amg).connect(g.gain);
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'bandpass';
+  hp.frequency.value = 5200;
+  hp.Q.value = 3;
+  const out = ctx.createGain();
+  out.gain.value = 0.012;
+  const swell = ctx.createOscillator();
+  swell.frequency.value = 0.07;
+  const sw = ctx.createGain();
+  sw.gain.value = 0.008;
+  swell.connect(sw).connect(out.gain);
+  o.connect(g).connect(hp).connect(out).connect(seasonBus);
+  o.start(t); am.start(t); swell.start(t);
+  seasonNodes.push(o, am, swell);
+}
+function cricket(at) {
+  for (let i = 0; i < 3; i++) tone(at + i * 0.06, { f: 4700, v: 0.02, dur: 0.035, type: 'sine', bus: seasonBus });
+}
+function rustle(at) { // dry leaves skittering
+  for (let i = 0; i < 6; i++) hit(at + i * 0.03 + Math.random() * 0.03, { f: 2500 + Math.random() * 2500, q: 2, v: 0.04, dur: 0.04, bus: seasonBus });
+}
+function startSeasonSound() {
+  for (const n of seasonNodes) { try { n.stop(); } catch { /* already stopped */ } }
+  seasonNodes = [];
+  clearInterval(seasonTimer);
+  if (!ctx) return;
+  const t = ctx.currentTime + 0.05;
+  if (season === 'snow') windBed(t, { f0: 380, f1: 700, q: 0.9, v: 0.05, rate: 0.06 });
+  if (season === 'dry') windBed(t, { f0: 900, f1: 1800, q: 0.6, v: 0.04, rate: 0.11 });
+  if (season === 'summer') cicadas(t);
+  seasonTimer = setInterval(() => {
+    if (!ctx || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+    if (season === 'spring' && Math.random() < 0.45) chirp(now + Math.random() * 0.5);
+    if (season === 'summer' && Math.random() < 0.5) cricket(now + Math.random() * 0.5);
+    if (season === 'dry' && Math.random() < 0.25) rustle(now + Math.random() * 0.5);
+  }, 900);
+}
+// Called by the room whenever the season changes (and once at start).
+export function setSeasonSound(name) {
+  season = name;
+  if (started) startSeasonSound();
+}
+export function setRain(on) {
+  try { localStorage.setItem(RAIN_KEY, on ? 'on' : 'off'); } catch { /* this visit only */ }
+  if (rainBus) rainBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.4);
 }
 
 // ── Effects ──────────────────────────────────────────────────────────
@@ -416,6 +532,7 @@ export async function setSound(on) {
       startRain();
       startClock();
       startLofi();
+      startSeasonSound();
     }
     master.gain.setTargetAtTime(reducedMotion() ? 0.7 : 0.7, ctx.currentTime, 0.4); // fade in
   } else if (ctx) {
@@ -432,5 +549,5 @@ export function resumeOnFirstClick() {
   window.addEventListener('keydown', go, { once: true, capture: true });
 }
 
-export const soundState = () => ({ on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played } });
+export const soundState = () => ({ on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played }, season, seasonNodes: seasonNodes.length, rain: rainOn(), rainGain: rainBus?.gain.value ?? null });
 export { lofiTimer, tickTimer };

@@ -254,6 +254,12 @@ The learner asked what could be added to the core while there is time left, and 
 - **Timer alarm:** three soft beeps when the 10 minutes run out (with sound on).
 - **Voice note:** an optional spoken message of at most 40 seconds on the Record Screen (RECORD VOICE → STOP VOICE, LISTEN, DELETE, RECORD AGAIN), stored in this browser's IndexedDB because localStorage is too small for audio (learner approved). It plays on its own row (‖/▶ and a progress bar) right after the intro line while the written answers follow. The shelf marks such tapes VOICE. Without a microphone, or if access is refused, the tape works the same without it. Backups and erasing: the note isn't in the backup file; erasing the tape deletes it.
 
+## Seasons Outside the Window (learner request, 3 Oct 2026)
+- A **SEASON** row in the room controls: AUTO, SNOW, SPRING, SUMMER, DRY. AUTO follows the month (Dec–Feb snow, Mar–May spring, Jun–Aug summer, Sep–Nov dry season / kemarau). The choice is saved; `?season=` sets it for a demo.
+- Each season has its own AI day picture (learner choice: four new Seedream pictures, accepting that the houses sit a little differently in each) and a night picture made from it, so day and night match.
+- Weather outside the glass: falling snow, drifting spring petals, dry leaves; a heat shimmer over the road in summer.
+- The ambience follows the season (learner choice): a soft cold wind in snow, birds in spring, cicadas and crickets in summer, a dry gusty wind with rustling leaves in the dry season. Rain plays only when RAIN ON is picked.
+
 ## Deferred From the POC
 - **Archiving tapes** — the learner chose permanent erase instead (see Core Additions).
 - **Editing a saved tape** — not discussed; not needed for the demo. Record a new tape instead.

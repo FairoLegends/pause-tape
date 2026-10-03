@@ -16,6 +16,7 @@ import { ShaderPass } from '../assets/vendor/addons/postprocessing/ShaderPass.js
 import { OutputPass } from '../assets/vendor/addons/postprocessing/OutputPass.js';
 import { reducedMotion, highContrast, soundOn, setPref, onPrefsChange } from './prefs.js';
 import { visibleTapes } from './store.js';
+import { setSeasonSound, setRain, rainOn } from './sound.js';
 import { setSound, vcrClick, tapeIn, staticBurst, soundState, lampSwitch, curtainSlide } from './sound.js';
 
 const stage = document.querySelector('[data-room-stage]');
@@ -367,6 +368,16 @@ const viewMat = new THREE.ShaderMaterial({
     }`,
 });
 const VIEW_W = 2.7;
+// Heat shimmer for summer: the bottom of the view (the road) wobbles a little (uHeat 0..1).
+viewMat.uniforms.uHeat = { value: 0 };
+viewMat.uniforms.uGain = { value: 1 }; // per-season exposure, so bright snow and spring don't wash out
+viewMat.uniforms.uTime = { value: 0 };
+viewMat.fragmentShader = viewMat.fragmentShader
+  .replace('uniform vec3 tint; varying vec2 vUv;', 'uniform vec3 tint; uniform float uHeat, uTime, uGain; varying vec2 vUv;')
+  .replace('vec3 a = texture2D(day, vUv).rgb * tint;', `float hz = uHeat * smoothstep(0.42, 0.18, vUv.y) * 0.0025;
+      vec2 uv = vUv + vec2(sin(vUv.y * 160.0 + uTime * 3.0) * hz, 0.0);
+      vec3 a = pow(texture2D(day, uv).rgb, vec3(1.0 + (1.0 - uGain) * 1.4)) * tint * uGain;`)
+  .replace('vec3 b = texture2D(night, vUv).rgb;', 'vec3 b = texture2D(night, uv).rgb;');
 const view = noPick(new THREE.Mesh(new THREE.PlaneGeometry(VIEW_W, VIEW_W * 0.75), viewMat));
 function placeView(aspect) { // centre the picture on the window's line of sight from the home camera
   const home = POSES.desktop.pos;
@@ -388,13 +399,45 @@ loadingManager.itemStart = ((start) => (url) => { load.total++; start(url); })(l
 loadingManager.itemEnd = ((end) => (url) => { load.done++; end(url); for (const fn of load.listeners) fn(); })(loadingManager.itemEnd);
 loadingManager.itemError = ((err) => (url) => { err(url); })(loadingManager.itemError);
 const loader = new THREE.TextureLoader(loadingManager);
-for (const [file, key] of [['window-day.webp', 'day'], ['window-night.webp', 'night']]) {
-  loader.load(asset(`room/${file}`), (t) => {
-    t.colorSpace = THREE.SRGBColorSpace;
-    viewMat.uniforms[key].value = t;
-    if (key === 'day') placeView(t.image.width / t.image.height);
-  }, undefined, () => {});
+
+// ── Seasons (learner request, 3 Oct 2026): the view outside changes with the season ──
+// AUTO follows the month: Dec-Feb snow, Mar-May spring, Jun-Aug summer, Sep-Nov dry season (kemarau).
+// Each season has its own AI day picture and a night picture made from it, so day and night match.
+// Only the current season's pair is downloaded; another season loads when it's picked.
+export const SEASONS = ['snow', 'spring', 'summer', 'dry'];
+const SEASON_KEY = 'pausetape.season.v1';
+function seasonFor(month) { // 0 = January
+  if (month === 11 || month <= 1) return 'snow';
+  if (month <= 4) return 'spring';
+  if (month <= 7) return 'summer';
+  return 'dry';
 }
+const askedSeason = (params.get('season') ?? '').toLowerCase();
+let seasonMode = SEASONS.includes(askedSeason) ? askedSeason : (() => {
+  try { const v = localStorage.getItem(SEASON_KEY); return SEASONS.includes(v) ? v : 'auto'; } catch { return 'auto'; }
+})();
+const seasonName = () => (seasonMode === 'auto' ? seasonFor(new Date().getMonth()) : seasonMode);
+const seasonTex = {}; // season -> { day, night } once loaded
+let shownSeason = null;
+function loadSeason(name) {
+  const apply = () => {
+    if (seasonName() !== name || !seasonTex[name]?.day || !seasonTex[name]?.night) return;
+    viewMat.uniforms.day.value = seasonTex[name].day;
+    viewMat.uniforms.night.value = seasonTex[name].night;
+    placeView(seasonTex[name].day.image.width / seasonTex[name].day.image.height);
+    shownSeason = name;
+  };
+  if (seasonTex[name]) { apply(); return; }
+  seasonTex[name] = {};
+  for (const kind of ['day', 'night']) {
+    loader.load(asset(`room/window-${name}-${kind}.webp`), (t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      seasonTex[name][kind] = t;
+      apply();
+    }, undefined, () => {});
+  }
+}
+loadSeason(seasonName());
 
 // ── Curtain: two pleated panels on a rod; a click slides them shut or open ──
 
@@ -1442,6 +1485,96 @@ const dust = noPick(new THREE.Points(dustGeo, dustMat));
 dust.renderOrder = 3;
 scene.add(dust);
 
+// Weather outside the window, by season: snowflakes, spring petals, or dry leaves and dust drifting
+// past the glass (between the view and the wall), so they move with real parallax. One Points draw,
+// animated in the vertex shader; summer has none (it has the heat shimmer instead).
+const WX_N = 160;
+const wxGeo = new THREE.BufferGeometry();
+{
+  const rr = rng(91);
+  const base = new Float32Array(WX_N * 3);
+  const seed = new Float32Array(WX_N);
+  for (let i = 0; i < WX_N; i++) {
+    base.set([fx + (rr() - 0.5) * 2.2, fy + (rr() - 0.5) * 1.6, WALL_Z - 0.15 - rr() * 1.1], i * 3);
+    seed[i] = rr();
+  }
+  wxGeo.setAttribute('position', new THREE.BufferAttribute(base, 3));
+  wxGeo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  wxGeo.boundingSphere = new THREE.Sphere(V(fx, fy, WALL_Z - 0.7), 2.2);
+}
+const WEATHER = { // fall speed m/s, sideways sway, size (m), colours, how many show
+  // gain: the picture's exposure in daylight (the original day view was made for 1.0; snow and spring
+  // are much brighter pictures, so they come down to keep their colours under the sunny tint).
+  snow: { fall: 0.18, sway: 0.09, size: 0.016, a: 0xffffff, b: 0xe6eeff, count: 1, round: 1, gain: 0.72, glare: 0.35 },
+  spring: { fall: 0.12, sway: 0.2, size: 0.02, a: 0xff9fc0, b: 0xffd6e4, count: 0.45, round: 0, gain: 0.8, glare: 0.6 },
+  summer: { fall: 0, sway: 0, size: 0, a: 0xffffff, b: 0xffffff, count: 0, round: 1, gain: 0.95, glare: 1 },
+  dry: { fall: 0.1, sway: 0.35, size: 0.022, a: 0xa8692e, b: 0xd2a560, count: 0.35, round: 0, gain: 0.8, glare: 0.4 },
+};
+const wxMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, toneMapped: false,
+  uniforms: { uTime: { value: 0 }, uFall: { value: 0 }, uSway: { value: 0 }, uSize: { value: 0 }, uScale: { value: 1 },
+    uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() }, uCount: { value: 0 }, uRound: { value: 1 },
+    uLight: { value: 1 }, uY0: { value: fy - 0.85 }, uY1: { value: fy + 0.85 } },
+  vertexShader: /* glsl */ `
+    attribute float seed;
+    uniform float uTime, uFall, uSway, uSize, uScale, uCount, uY0, uY1;
+    varying float vSeed; varying float vShow;
+    void main() {
+      vSeed = seed;
+      vShow = step(seed, uCount);
+      float h = uY1 - uY0;
+      vec3 p = position;
+      float speed = uFall * (0.7 + 0.6 * seed);
+      p.y = uY0 + mod(position.y - uY0 - uTime * speed, h);
+      p.x += sin(uTime * (0.6 + seed) + seed * 20.0) * uSway;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = vShow * max(1.5, uScale * uSize * (0.6 + 0.8 * seed) / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform vec3 uA, uB; uniform float uRound, uLight;
+    varying float vSeed; varying float vShow;
+    void main() {
+      if (vShow < 0.5) discard;
+      vec2 c = gl_PointCoord - 0.5;
+      // round flakes, or small tilted ovals for petals and leaves
+      float ang = vSeed * 6.283;
+      vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * c;
+      float d = mix(length(q * vec2(1.0, 2.0)), length(c), uRound);
+      float a = smoothstep(0.5, 0.25, d);
+      if (a < 0.02) discard;
+      gl_FragColor = vec4(mix(uA, uB, vSeed) * uLight, a * 0.9);
+    }`,
+});
+const weather = noPick(new THREE.Points(wxGeo, wxMat));
+weather.renderOrder = 1;
+scene.add(weather);
+function applyWeather(name) {
+  const w = WEATHER[name];
+  wxMat.uniforms.uFall.value = w.fall;
+  wxMat.uniforms.uSway.value = w.sway;
+  wxMat.uniforms.uSize.value = w.size;
+  wxMat.uniforms.uA.value.set(w.a);
+  wxMat.uniforms.uB.value.set(w.b);
+  wxMat.uniforms.uCount.value = w.count;
+  wxMat.uniforms.uRound.value = w.round;
+  weather.visible = w.count > 0;
+  viewMat.uniforms.uHeat.value = name === 'summer' ? 1 : 0;
+  viewMat.uniforms.uGain.value = w.gain;
+}
+applyWeather(seasonName());
+setSeasonSound(seasonName());
+function setSeason(m) {
+  seasonMode = m;
+  try { localStorage.setItem(SEASON_KEY, m); } catch { /* still applies for this visit */ }
+  const url = new URL(location.href);
+  url.searchParams.delete('season');
+  history.replaceState(null, '', url);
+  loadSeason(seasonName());
+  applyWeather(seasonName());
+  setSeasonSound(seasonName());
+}
+
 // Time of day (prd.md > Look and Feel): four periods by the visitor's local hour, plus ?time=.
 const PERIODS = {
   morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97, disc: 0xffc880, discSize: 1.0, beam: 0xffd9a0, beamO: 0.3, lamp: 0 },
@@ -1806,6 +1939,10 @@ function syncButtons() {
   sb.textContent = soundOn() ? 'SOUND ON' : 'SOUND OFF';
   for (const b of panel.querySelectorAll('[data-pref]')) b.setAttribute('aria-pressed', String(b.dataset.pref === 'motion' ? reducedMotion() : highContrast()));
   for (const b of panel.querySelectorAll('[data-time]')) b.setAttribute('aria-pressed', String(b.dataset.time === mode));
+  for (const b of panel.querySelectorAll('[data-season]')) b.setAttribute('aria-pressed', String(b.dataset.season === seasonMode));
+  const rb = panel.querySelector('[data-rain]');
+  rb.setAttribute('aria-pressed', String(rainOn()));
+  rb.textContent = rainOn() ? 'RAIN ON' : 'RAIN OFF';
 }
 panel.addEventListener('click', (e) => {
   const b = e.target.closest('[data-time]');
@@ -1817,6 +1954,9 @@ panel.addEventListener('click', (e) => {
     setTarget(currentName());
     syncButtons();
   }
+  const sbtn = e.target.closest('[data-season]');
+  if (sbtn) { setSeason(sbtn.dataset.season); syncButtons(); }
+  if (e.target.closest('[data-rain]')) { setRain(!rainOn()); syncButtons(); }
   const tg = e.target.closest('[data-toggle]');
   if (tg) {
     const open = panel.classList.toggle('is-hidden') === false;
@@ -1845,6 +1985,7 @@ function resize() {
   composer.setSize(innerWidth, innerHeight);
   // pixels per metre at 1 m away, so a speck keeps its real size whatever the window or lens
   dustMat.uniforms.uScale.value = (innerHeight * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  wxMat.uniforms.uScale.value = dustMat.uniforms.uScale.value;
   gradePass.uniforms.uAspect.value = innerWidth / innerHeight;
   css.setSize(innerWidth, innerHeight);
   const aspect = innerWidth / innerHeight;
@@ -1951,9 +2092,13 @@ renderer.setAnimationLoop((now) => {
   hemi.intensity = A.hemiI * (0.6 + 0.4 * co);
   scene.environmentIntensity = A.env * (0.6 + 0.4 * co);
   glowMat.color.copy(C.glow);
-  glowMat.opacity = A.glowO * (0.35 + 0.65 * co);
+  glowMat.opacity = A.glowO * (0.35 + 0.65 * co) * WEATHER[seasonName()].glare; // pale pictures (snow, haze) get less glare
   viewMat.uniforms.mixNight.value = A.night;
   viewMat.uniforms.tint.value.copy(C.tint);
+  viewMat.uniforms.uTime.value = reduced.matches ? 0 : t;
+  wxMat.uniforms.uTime.value = reduced.matches ? 0 : t;
+  wxMat.uniforms.uLight.value = 1 - 0.55 * A.night; // flakes and petals dim at night
+  weather.visible = WEATHER[seasonName()].count > 0 && z < 0.98;
   renderer.toneMappingExposure = A.exposure;
   const flick = reduced.matches ? 0 : Math.sin(t * 7.3) * 0.04 + Math.sin(t * 2.1) * 0.03; // a live picture flickers
   tvLight.intensity = A.tv * (1 + flick);
@@ -2189,6 +2334,7 @@ for (const sx of [-1, 1]) {
 
 // For the automated checks (the room is a module, so they need a handle on it).
 window.__room = {
+  season: () => ({ mode: seasonMode, name: seasonName(), shown: shownSeason, weather: weather.visible, count: wxMat.uniforms.uCount.value, heat: viewMat.uniforms.uHeat.value }),
   camera,
   renderer,
   sunShadowSize: () => sun.shadow.mapSize.x,
