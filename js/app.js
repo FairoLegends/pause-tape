@@ -10,8 +10,8 @@ import { initPlayback, PACE } from './playback.js';
 import { startCrt } from './crt.js';
 import { switchGlitch } from './motion.js';
 import { downloadIcs } from './ics.js';
-import { reducedMotion, highContrast, soundOn, onPrefsChange } from './prefs.js';
-import { setSound, resumeOnFirstClick, screenChange, blip, tapeIn, vcrClick } from './sound.js';
+import { reducedMotion, highContrast, musicOn, onPrefsChange } from './prefs.js';
+import { setMusic, resumeOnFirstClick, screenChange, blip, tapeIn, vcrClick } from './sound.js';
 import { saveVoice, deleteVoice } from './voice.js';
 
 // --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
@@ -229,16 +229,17 @@ startCrt(document.querySelector('.tv__screen'), {
 
 show('shelf');
 
-// Sound on / off: one button in the top-left corner, in the room and on the flat TV. Sound is off
-// until the player turns it on (that click is also what browsers need before any audio can play).
+// MUSIC on / off: one button in the top-left corner, in the room and on the flat TV (learner request:
+// it switches only the lo-fi music; the room's other sounds start at the first click and the full mute
+// is SOUND in the room controls).
 const soundBtn = document.querySelector('[data-sound-quick]');
 function syncSoundButton() {
-  soundBtn.setAttribute('aria-pressed', String(soundOn()));
-  soundBtn.setAttribute('aria-label', soundOn() ? 'Mute sound' : 'Turn sound on');
-  soundBtn.querySelector('[data-sound-text]').textContent = soundOn() ? 'SOUND ON' : 'SOUND OFF';
-  soundBtn.classList.toggle('is-on', soundOn());
+  soundBtn.setAttribute('aria-pressed', String(musicOn()));
+  soundBtn.setAttribute('aria-label', musicOn() ? 'Turn music off' : 'Turn music on');
+  soundBtn.querySelector('[data-sound-text]').textContent = musicOn() ? 'MUSIC ON' : 'MUSIC OFF';
+  soundBtn.classList.toggle('is-on', musicOn());
 }
-soundBtn.addEventListener('click', () => { setSound(!soundOn()).then(syncSoundButton); });
+soundBtn.addEventListener('click', () => { setMusic(!musicOn()).then(syncSoundButton); });
 onPrefsChange(syncSoundButton);
 syncSoundButton();
 resumeOnFirstClick();
@@ -264,16 +265,16 @@ async function startRoomIfPossible() {
   const probe = document.createElement('canvas');
   const gl = probe.getContext('webgl2') || probe.getContext('webgl');
   const asked = new URLSearchParams(location.search).has('flat');
-  if (!gl && !asked && window.innerWidth >= 700 && window.matchMedia('(pointer: fine)').matches) {
+  if (!gl && !asked) {
     // No WebGL: the app works as the flat TV; say so once, quietly.
     const note = document.querySelector('[data-no-webgl]');
     note.hidden = false;
     setTimeout(() => { note.hidden = true; }, 6000);
   }
-  // The room is for laptops and desktops: a mouse (or trackpad) and a window of at least 700 x 500.
-  // A phone, even on its side, keeps the flat TV, which fits a small screen and works by touch.
-  const desktop = window.matchMedia('(pointer: fine)').matches && window.innerWidth >= 700 && window.innerHeight >= 500;
-  if (!gl || !desktop || asked) return;
+  // The room runs on laptops, desktops and (learner request, 4 Oct 2026) phones and tablets too, by
+  // touch, in a lighter mode (js/room.js: LITE). Only a tiny window keeps the flat TV.
+  const roomFits = Math.max(window.innerWidth, window.innerHeight) >= 560 && Math.min(window.innerWidth, window.innerHeight) >= 300;
+  if (!gl || !roomFits || asked) return;
   const startedAt = performance.now();
   // Two thirds of the wait is the room's code (three.js and the scene), the rest its pictures.
   showLoading(0.02, startedAt);

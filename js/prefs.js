@@ -25,8 +25,13 @@ export function reducedMotion() {
 export function highContrast() {
   return prefs.contrast ?? Boolean(systemContrast?.matches);
 }
+// SOUND is the master switch (learner choice, 4 Oct 2026: on by default, starting at the first click,
+// since browsers block sound before one); MUSIC is the lo-fi loop only, off until turned on.
 export function soundOn() {
-  return prefs.sound === true; // off until the player turns it on (browsers block sound before a click anyway)
+  return prefs.sound !== false;
+}
+export function musicOn() {
+  return prefs.music === true;
 }
 
 export function setPref(name, value) {

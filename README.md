@@ -18,9 +18,9 @@ Built for the Devpost **Build With AI: Basics** hackathon. The planning document
 2. Click the **VCR** under the TV. The camera moves into the TV and the tape shelf opens.
 3. There's a **SAMPLE** tape called "Pause Tape", already READY. Click it to watch a full playback, then press **I'm back on it**.
 4. Press **● REC** to record your own tape. Only the project name, the return date and the first step are required.
-5. Optional: click **SOUND OFF** in the top-left corner to turn on the room's sounds.
+5. The room's sounds (rain, the clock, the season outside, the VCR) start with your first click. **MUSIC OFF** in the top-left corner turns the lo-fi music on; **SOUND** in ROOM CONTROLS mutes everything.
 
-On a phone the app opens as a flat TV without the 3D room. Everything else works the same.
+On a phone or tablet the 3D room works by touch, in a lighter mode (lower resolution, smaller shadows) so it stays smooth. Tap the VCR, the curtain, the lamp or the photo. It is most comfortable with the phone turned sideways.
 
 ## What's in it
 
@@ -59,7 +59,7 @@ Useful addresses for testing and demos:
 |---|---|
 | `http://localhost:8000/?time=pagi` (or `siang`, `sore`, `malam`, or `morning` / `day` / `afternoon` / `night`) | Fixes the time of day in the room |
 | `http://localhost:8000/?season=snow` (or `spring`, `summer`, `dry`) | Fixes the season outside the window |
-| `http://localhost:8000/?flat` | The flat TV without the 3D room (what phones get) |
+| `http://localhost:8000/?flat` | The flat TV without the 3D room |
 
 **Reset for a demo from an empty shelf:** open DevTools (F12) → Application → Local Storage → `http://localhost:8000`, and delete the keys that start with `pausetape.`. The sample tape comes back once the shelf is empty again.
 
@@ -69,10 +69,10 @@ Useful addresses for testing and demos:
   - **Outlook for Windows** (the new app) imports it as an all-day event marked Free, with the first step in the notes. Before I added Outlook's own all-day lines to the file, it showed the event shifted by 7 hours (the WIB offset), from 07:00 to 07:00 the next day.
   - **Google Calendar on Android** imports the right date as all day, with the note. But it replaces the file's 08:00 reminder with its own default for all-day events (17:00 the day before), and marks the event Busy instead of Free. That's Google Calendar's behaviour with imported files, and a web page can't change it.
 - **The ▶ in the event title** shows as an emoji (▶️) in Google Calendar.
-- **The 3D room needs WebGL** and a mouse or trackpad on a window at least 700 × 500 px. Without those you get the flat TV, which has every feature except the room.
+- **The 3D room needs WebGL** and a screen at least 560 × 300 px. Without those you get the flat TV, which has every feature except the room. On phones it runs in a lighter mode; I tested it with Edge's phone emulation and on my own phone, not on many devices.
 - **Voice notes need a microphone** and a page served over `https` or `localhost`. The browser asks for permission the first time. If there's no microphone, or access is refused, the tape works without a voice note.
 - **The seasons' pictures** were generated separately, so the houses across the street sit a little differently in each season.
-- **Browsers:** checked in Microsoft Edge on Windows (and the flat TV at phone sizes). Safari isn't tested; it gets a simpler CRT curve (CSS instead of the SVG filter).
+- **Browsers:** checked in Microsoft Edge on Windows (and phone sizes, portrait and landscape, by touch emulation). Safari isn't tested; it gets a simpler CRT curve (CSS instead of the SVG filter).
 
 ## How it's built
 
@@ -93,7 +93,7 @@ Plain HTML, CSS and JavaScript modules: no framework, no build step, no backend.
 
 ## Credits
 
-- **AI-generated pictures:** the window views and the three paintings were generated with **Seedream 5.0 pro** (`dola-seedream-5-0-pro-260628`, by BytePlus), reached through an OpenAI-compatible API gateway, with no people, logos, text or watermarks. The night views were made from the day pictures with a small image script. The `.jpg` originals keep their C2PA content credentials.
+- **AI-generated pictures:** the window views and the two paintings were generated with **Seedream 5.0 pro** (`dola-seedream-5-0-pro-260628`, by BytePlus), reached through an OpenAI-compatible API gateway, with no people, logos, text or watermarks. The night views were made from the day pictures with a small image script. The `.jpg` originals keep their C2PA content credentials.
 - **Font:** [VT323](https://github.com/google/fonts/tree/main/ofl/vt323) by Peter Hull, SIL Open Font License 1.1 (`assets/fonts/OFL.txt`).
 - **Libraries:** [three.js](https://threejs.org/) (MIT) and [GSAP](https://gsap.com/) (GSAP standard no-charge license).
 - **Sound:** all generated in code, with no audio files.

@@ -485,3 +485,10 @@
     font-size: 16px;
   }
 }
+
+/* Touch screens with the room: the app on the TV glass is scaled down, so buttons get a minimum size
+   in the app's own pixels that comes out at 44 px on screen (--tap is set by js/room.js). */
+@media (pointer: coarse) {
+  .room-screen button { min-height: var(--tap, 44px); }
+  .room-screen .tape__eject { min-width: var(--tap, 44px); }
+}

@@ -33,10 +33,16 @@ document.fonts.load('44px VT323'); // canvas text doesn't make the browser load 
 
 // ── Renderer, scene, camera ───────────────────────────────────────────
 
+// Phones and tablets (touch, learner request 4 Oct 2026): the same room, lighter, so it stays smooth on
+// a phone GPU: pixel ratio capped at 1.5, no antialias (the grade pass hides the edges), a smaller sun
+// shadow map, fewer dust specks and drops, and no SVG bend on the app screen (CSS look only).
+const TOUCH = window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(pointer: fine)').matches;
+const LITE = TOUCH || params.has('lite');
+
 // alpha: the TV glass is drawn as a see-through hole, and the app's HTML shows through it.
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: !LITE, alpha: true, powerPreference: 'high-performance' });
 renderer.setClearColor(0x000000, 0);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1.5 : 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
@@ -620,8 +626,10 @@ function makeBendMap() {
 
 // The app's own screen, placed on the glass. It keeps one fixed size in CSS pixels (4:3) and the
 // CSS3DObject scales it to the glass, like a world-space Canvas with a fixed reference resolution.
-const APP_W = 880;
-const APP_H = 660;
+// On a phone the zoomed glass is only 300-480 px wide, so the app gets a smaller reference size there:
+// its 22 px text then shows at about 16 px instead of 10 (learner: the portrait TV was unreadable).
+let APP_W = 880;
+let APP_H = 660;
 const screenWrap = document.createElement('div');
 screenWrap.className = 'room-screen';
 screenWrap.append(appScreen);
@@ -629,7 +637,17 @@ const screenObj = new CSS3DObject(screenWrap);
 screenWrap.style.userSelect = ''; // CSS3DObject turns text selection off; the form needs it
 scene.updateMatrixWorld(true);
 screen.getWorldPosition(screenObj.position);
-screenObj.scale.setScalar(SCREEN.w / APP_W);
+function sizeAppScreen(glassPx) { // glassPx: how wide the glass is on screen at full zoom
+  APP_W = Math.round(THREE.MathUtils.clamp(glassPx * 1.38, 480, 880) / 4) * 4;
+  APP_H = APP_W * 0.75;
+  screenWrap.style.width = `${APP_W}px`;
+  screenWrap.style.height = `${APP_H}px`;
+  screenObj.scale.setScalar(SCREEN.w / APP_W);
+  // The app is drawn smaller than 1:1 on the glass, so a 44 px touch target needs to be bigger in the
+  // app's own pixels to stay 44 px under a finger (css/room.css uses --tap on touch screens).
+  screenWrap.style.setProperty('--tap', `${Math.ceil(44 * APP_W / Math.max(glassPx, 1))}px`);
+}
+sizeAppScreen(880);
 cssScene.add(screenObj);
 // Focusing a field can scroll the 3D layer's box; it must stay put.
 css.domElement.addEventListener('scroll', () => { css.domElement.scrollTop = 0; css.domElement.scrollLeft = 0; });
@@ -957,15 +975,37 @@ function makeBookshelf() {
     const fill = s === 2 ? 0.55 : 0.92; // one shelf is half empty, like a real one
     const xEnd = W / 2 - T - 0.015;
     let x = -W / 2 + T + 0.015;
+    // Books stand side by side with a small gap and never pass into each other (learner markup, 4 Oct
+    // 2026: overlapping boxes flickered where their faces met). A leaning book only appears right after a
+    // gap, tips toward the book before it, and rests its top on that book: it is rotated about its
+    // bottom corner, and the next book starts after its full tilted footprint.
+    let afterGap = false;
+    let prevH = 0;
     while (x < xEnd - 0.03) {
       const w = 0.028 + rand() * 0.03;
       if (x + w > xEnd) break;
-      if (rand() > fill) { x += 0.05 + rand() * 0.06; continue; } // a gap
+      if (rand() > fill) { x += 0.05 + rand() * 0.06; afterGap = true; continue; } // a gap
       const h = Math.min(maxH, 0.2 + rand() * 0.14);
       const d = 0.15 + rand() * 0.05;
-      const lean = rand() > 0.93 ? (rand() > 0.5 ? 0.22 : -0.22) : 0;
-      items.push({ x: x + w / 2, y: floorY + h / 2, z: D / 2 - 0.03 - d / 2, w, h, d, lean, c: palette[Math.floor(rand() * palette.length)] });
-      x += w + 0.003 + (lean ? 0.03 : 0);
+      const c = palette[Math.floor(rand() * palette.length)];
+      const wantLean = rand() > 0.6; // most books after a gap lean on their neighbour
+      if (wantLean && afterGap && prevH > 0) {
+        // Tilt to the left (toward the previous book, which ends at x - 0.04 or so): rotate about the
+        // bottom-left corner by an angle that keeps the top-left corner just clear of that book.
+        const ang = 0.2;
+        const footprint = w * Math.cos(ang) + h * Math.sin(ang);
+        const x0 = x + h * Math.sin(ang); // bottom-left corner, so the top-left leans back to x
+        const cx = x0 + (w / 2) * Math.cos(ang) - (h / 2) * Math.sin(ang);
+        const cy = floorY + (w / 2) * Math.sin(ang) + (h / 2) * Math.cos(ang);
+        if (x + footprint + 0.004 > xEnd) break;
+        items.push({ x: cx, y: cy, z: D / 2 - 0.03 - d / 2, w, h, d, lean: ang, c });
+        x += footprint + 0.004;
+      } else {
+        items.push({ x: x + w / 2, y: floorY + h / 2, z: D / 2 - 0.03 - d / 2, w, h, d, lean: 0, c });
+        x += w + 0.004;
+      }
+      afterGap = false;
+      prevH = h;
     }
   }
   const books = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), std(0xffffff, 0.75), items.length);
@@ -980,6 +1020,7 @@ function makeBookshelf() {
   });
   books.instanceMatrix.needsUpdate = true;
   books.instanceColor.needsUpdate = true;
+  g.userData.books = items; // for the checks: no two books may overlap
   books.castShadow = true;
   books.receiveShadow = true;
   g.add(books);
@@ -1125,7 +1166,7 @@ const clockGroup = new THREE.Group();
 clockGroup.name = 'clock';
 const CLOCK_W = 0.48;
 const CLOCK_D = 0.3;
-clockGroup.position.set(2.25, 0, -1.6);
+clockGroup.position.set(1.83, 0, -1.6); // learner request (4 Oct 2026): where the two paintings were, between the lamp and the right wall
 clockGroup.scale.set(0.4 / 0.53, 1.0, 0.4 / 0.39); // footprint 0.4 x 0.4 (the model is 0.53 x 0.39 with its trim), 2.0 m tall
 scene.add(clockGroup);
 const carveTex = canvasTexture(256, 512, (g, w, h) => { // carved teak: grain, then a vine relief
@@ -1295,14 +1336,13 @@ function makePainting(file, w, h, place) {
   paintings.push(g);
   return g;
 }
-// Back wall, right of the window (above the VCR and the lamp): the mountain, then the flowers.
-// Right of the window (the curtain rod ends near x 1.12): landscape above the lamp, flowers beside it.
-makePainting('painting-gunung.webp', 0.56, 0.42, (g) => g.position.set(1.3, 1.72, BACK + 0.02)); // x 0.98..1.62
-makePainting('painting-bunga.webp', 0.26, 0.35, (g) => g.position.set(1.83, 1.72, BACK + 0.02)); // x 1.67..1.99, clear of the clock (2.05)
-// Left side wall, beside the bookshelf: the rice terraces.
-// Back wall above the bookshelf (learner's choice: with the 45° camera a painting on the left wall
-// falls outside the frame). The shelf tops out at 1.9 m and the ceiling is at 2.6 m.
-makePainting('painting-sawah.webp', 0.6, 0.45, (g) => g.position.set(-1.95, 2.2, BACK + 0.02));
+// Learner layout (4 Oct 2026): one painting on each side wall, right next to the back corner, at eye
+// height. Left wall beside the bookshelf: the rice terraces; right wall beside the clock: the mountain.
+// (The flower painting was removed.) Each hangs flat on its wall, facing into the room.
+const SIDE_X = ROOM.w / 2 - 0.02;
+const SIDE_Z = BACK + 0.55; // its centre, 0.55 m out from the back corner (clear of the shelf and the clock)
+makePainting('painting-sawah.webp', 0.6, 0.45, (g) => { g.position.set(-SIDE_X, 1.55, SIDE_Z); g.rotation.y = Math.PI / 2; });
+makePainting('painting-gunung.webp', 0.56, 0.42, (g) => { g.position.set(SIDE_X, 1.55, SIDE_Z); g.rotation.y = -Math.PI / 2; });
 // ── Lights ────────────────────────────────────────────────────────────
 
 // One direction for everything that is "the sun": the light itself, the visible shafts and the
@@ -1318,7 +1358,7 @@ sun.target.position.copy(SUN_AIM);
 sun.castShadow = true;
 // The shadow box hugs the room (5 x 3.6 m seen along the sun), so a 1024 map is as sharp as the old
 // 2048 one over 7 m, at a quarter of the memory and fill. radius softens the edge like a real window.
-sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.mapSize.set(LITE ? 512 : 1024, LITE ? 512 : 1024);
 scene.add(sun, sun.target);
 sun.shadow.bias = -0.0005;
 sun.shadow.normalBias = 0.025;
@@ -1431,7 +1471,7 @@ function aimShaft(d) {
 // call (Points), moved in the vertex shader so the CPU does nothing per frame. They only show where
 // the light is (brightest along the shafts' axis), fade with the shafts, and stand still with
 // reduced motion.
-const DUST_N = 180;
+const DUST_N = LITE ? 90 : 180;
 const dustGeo = new THREE.BufferGeometry();
 {
   const r = rng(77);
@@ -1459,14 +1499,22 @@ const dustMat = new THREE.ShaderMaterial({
     uniform vec3 uStart, uDir;
     varying float vLight;
     void main() {
-      float t = uTime * (0.05 + 0.05 * seed) + seed * 40.0;
-      vec3 p = position + vec3(sin(t * 1.3 + seed * 7.0), sin(t * 0.9 + seed * 3.0) * 0.6 - 0.25 * fract(t * 0.05), cos(t * 1.1 + seed * 5.0)) * 0.06;
+      // Each speck drifts on its own slow, wandering path (sums of sines at unrelated speeds, like
+      // turbulence), slowly sinks and is carried back up by warm air, and turns as it goes (learner: the
+      // dust looked frozen; now each one moves visibly, a few centimetres a second).
+      float t = uTime + seed * 100.0;
+      vec3 w = vec3(
+        sin(t * 0.37 + seed * 7.0) + 0.6 * sin(t * 0.91 + seed * 13.0) + 0.3 * sin(t * 1.73 + seed * 29.0),
+        0.8 * sin(t * 0.29 + seed * 3.0) + 0.4 * sin(t * 0.83 + seed * 17.0),
+        cos(t * 0.33 + seed * 5.0) + 0.5 * cos(t * 0.77 + seed * 11.0));
+      float rise = mod(t * (0.012 + 0.012 * seed), 0.5) - 0.25; // a slow loop up through the light
+      vec3 p = position + w * 0.09 + vec3(0.0, rise, 0.0);
       // brightness: how close to the middle of the light column it floats
       vec3 rel = p - uStart;
       float along = dot(rel, uDir);
       float off = length(rel - uDir * along);
       vLight = smoothstep(0.42, 0.05, off / (0.4 + along / 2.4)) * smoothstep(0.0, 0.3, along) * smoothstep(2.4, 1.4, along);
-      vLight *= 0.6 + 0.4 * sin(t * 3.0 + seed * 11.0); // twinkle as the specks turn
+      vLight *= 0.45 + 0.55 * pow(0.5 + 0.5 * sin(t * 2.3 + seed * 11.0), 2.0); // glints as the specks turn in the light
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       gl_PointSize = max(2.0, uScale * (0.007 + 0.006 * seed) / -mv.z); // specks of 7-13 mm, so they read at room distance
       gl_Position = projectionMatrix * mv;
@@ -1550,6 +1598,126 @@ const wxMat = new THREE.ShaderMaterial({
 const weather = noPick(new THREE.Points(wxGeo, wxMat));
 weather.renderOrder = 1;
 scene.add(weather);
+// Rain (learner request, 4 Oct 2026: the rain sound had no picture). With RAIN ON: streaks falling
+// outside, between the view and the wall (one LineSegments draw, moved in the vertex shader), drops
+// running down the glass (a shader on a plane just in front of the pane), and a duller, darker view.
+// It follows the season: grey-blue drizzle in the dry season, warm heavy rain in summer, light rain with
+// pink petals still drifting in spring, and sleet (slower, whiter, mixed with the snow) in snow.
+const RAIN = {
+  snow: { speed: 3.2, len: 0.05, color: 0xe8eeff, alpha: 0.6, amount: 0.55, drops: 0.35, dim: 0.86 },
+  spring: { speed: 6.5, len: 0.11, color: 0xc9d8e6, alpha: 0.45, amount: 0.75, drops: 0.8, dim: 0.82 },
+  summer: { speed: 8.0, len: 0.16, color: 0xd6e2ee, alpha: 0.55, amount: 1, drops: 1, dim: 0.78 },
+  dry: { speed: 5.5, len: 0.09, color: 0xc2c8cc, alpha: 0.35, amount: 0.45, drops: 0.5, dim: 0.88 },
+};
+const RAIN_N = LITE ? 220 : 420;
+const rainGeo = new THREE.BufferGeometry();
+{
+  const rr = rng(57);
+  const pos = new Float32Array(RAIN_N * 2 * 3);
+  const seed = new Float32Array(RAIN_N * 2);
+  const end = new Float32Array(RAIN_N * 2);
+  for (let i = 0; i < RAIN_N; i++) {
+    const x = fx + (rr() - 0.5) * 2.4;
+    const y = fy + (rr() - 0.5) * 1.6;
+    const z = WALL_Z - 0.12 - rr() * 1.2;
+    const s = rr();
+    for (let k = 0; k < 2; k++) { pos.set([x, y, z], (i * 2 + k) * 3); seed[i * 2 + k] = s; end[i * 2 + k] = k; }
+  }
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  rainGeo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  rainGeo.setAttribute('tip', new THREE.BufferAttribute(end, 1));
+  rainGeo.boundingSphere = new THREE.Sphere(V(fx, fy, WALL_Z - 0.7), 2.4);
+}
+const rainMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, toneMapped: false,
+  uniforms: { uTime: { value: 0 }, uSpeed: { value: 6 }, uLen: { value: 0.1 }, uColor: { value: new THREE.Color() }, uAlpha: { value: 0 },
+    uAmount: { value: 1 }, uY0: { value: fy - 0.85 }, uY1: { value: fy + 0.85 } },
+  vertexShader: /* glsl */ `
+    attribute float seed; attribute float tip;
+    uniform float uTime, uSpeed, uLen, uAmount, uY0, uY1;
+    varying float vA;
+    void main() {
+      float h = uY1 - uY0;
+      vec3 p = position;
+      float sp = uSpeed * (0.8 + 0.4 * seed);
+      p.y = uY0 + mod(position.y - uY0 - uTime * sp, h) + tip * uLen * (0.7 + 0.6 * seed);
+      p.x += tip * uLen * 0.18; // a slight slant in the wind
+      vA = step(seed, uAmount) * (0.5 + 0.5 * tip);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform vec3 uColor; uniform float uAlpha; varying float vA;
+    void main() { if (vA < 0.01) discard; gl_FragColor = vec4(uColor, uAlpha * vA); }`,
+});
+const rainLines = noPick(new THREE.LineSegments(rainGeo, rainMat));
+rainLines.renderOrder = 1;
+rainLines.visible = false;
+scene.add(rainLines);
+// Drops on the pane: little beads that slide down in jerks and leave a faint trail, drawn procedurally
+// in a fragment shader (no texture), so they never repeat in an obvious way.
+const dropsMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, toneMapped: false,
+  uniforms: { uTime: { value: 0 }, uAmount: { value: 0 }, uLight: { value: 1 }, uAspect: { value: WIN.w / WIN.h } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: /* glsl */ `
+    uniform float uTime, uAmount, uLight, uAspect; varying vec2 vUv;
+    float h1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+    void main() {
+      vec2 uv = vec2(vUv.x * uAspect, vUv.y);
+      // three layers of columns, each column carrying one sliding drop (a drop is a few millimetres
+      // across: a clear bead with a bright rim and a darker middle, like real water on glass)
+      float rim = 0.0;
+      float body = 0.0;
+      for (int L = 0; L < 3; L++) {
+        float cols = 22.0 + float(L) * 14.0;
+        float cx = floor(uv.x * cols);
+        float id = cx + float(L) * 57.0;
+        if (h1(id) > uAmount) continue;
+        float fx = fract(uv.x * cols) - 0.5 - (h1(id + 3.0) - 0.5) * 0.4;
+        float speed = 0.05 + h1(id + 7.0) * 0.09;
+        float t = uTime * speed + h1(id + 11.0) * 10.0;
+        float jerk = t + 0.25 * sin(t * 6.283 * 2.0); // it moves in small jerks, like a real drop
+        float y = 1.0 - fract(jerk);
+        float r = 0.07 + h1(id + 13.0) * 0.06; // in column widths
+        float dist = length(vec2(fx, (uv.y - y) * cols * 0.75));
+        float inside = smoothstep(r, r * 0.8, dist);
+        rim = max(rim, inside * smoothstep(r * 0.45, r * 0.95, dist));
+        body = max(body, inside);
+        // the wet trail it leaves above it, thin and fading
+        float trail = smoothstep(0.035, 0.0, abs(fx)) * step(y, uv.y) * smoothstep(y + 0.3, y, uv.y);
+        rim = max(rim, trail * 0.35);
+      }
+      // fine still droplets scattered over the pane
+      vec2 cell = uv * vec2(90.0, 80.0);
+      vec2 g = floor(cell);
+      float sp = h1(g.x * 13.0 + g.y * 71.0);
+      if (sp > 1.0 - 0.08 * uAmount) {
+        float dd = length(fract(cell) - 0.5);
+        float rr = 0.12 + 0.1 * h1(g.x + g.y * 3.0);
+        float ins = smoothstep(rr, rr * 0.7, dd);
+        rim = max(rim, ins * smoothstep(rr * 0.3, rr, dd));
+        body = max(body, ins);
+      }
+      if (body < 0.02 && rim < 0.02) discard;
+      // the middle darkens a little (it refracts the darker ground), the rim catches the sky's light
+      vec3 col = mix(vec3(0.35, 0.4, 0.48), vec3(0.92, 0.96, 1.0), rim) * uLight;
+      float a = max(body * 0.16, rim * 0.5);
+      gl_FragColor = vec4(col, a);
+    }`,
+});
+const drops = noPick(new THREE.Mesh(new THREE.PlaneGeometry(WIN.w, WIN.h), dropsMat));
+drops.position.set(fx, fy, WALL_Z + 0.035);
+drops.visible = false;
+scene.add(drops);
+let rainShown = 0; // eased 0..1, so rain fades in and out with the switch
+function applyRain(name) {
+  const p = RAIN[name];
+  rainMat.uniforms.uSpeed.value = p.speed;
+  rainMat.uniforms.uLen.value = p.len;
+  rainMat.uniforms.uColor.value.set(p.color);
+  rainMat.uniforms.uAmount.value = p.amount;
+}
+
 function applyWeather(name) {
   const w = WEATHER[name];
   wxMat.uniforms.uFall.value = w.fall;
@@ -1562,6 +1730,7 @@ function applyWeather(name) {
   weather.visible = w.count > 0;
   viewMat.uniforms.uHeat.value = name === 'summer' ? 1 : 0;
   viewMat.uniforms.uGain.value = w.gain;
+  applyRain(name);
 }
 applyWeather(seasonName());
 setSeasonSound(seasonName());
@@ -1817,7 +1986,7 @@ function updateHoverLabel() {
   hoverLabel.style.transform = `translate(${((_lbl.x + 1) / 2) * innerWidth}px, ${((1 - _lbl.y) / 2) * innerHeight}px) translate(-50%, -100%)`;
   hoverLabel.style.opacity = String(Math.min(1, hoverAmt[best] * 1.2));
 }
-const HINT_STANDBY = 'VCR · CURTAIN · LAMP · PHOTO';
+const HINT_STANDBY = TOUCH ? 'TAP: VCR · CURTAIN · LAMP · PHOTO' : 'VCR · CURTAIN · LAMP · PHOTO';
 
 // eject (a tape was in: STOP, BACK TO THE ROOM or the end of a replay brings the camera back out to the
 // VCR, the cassette slides out and lifts away, then the room) is the reverse of insert.
@@ -2038,6 +2207,7 @@ function resize() {
   const lift = viewH * (BAND_BOTTOM - BAND_TOP) / 2; // the glass sits a little above the middle
   POSES.screen.pos.set(SCREEN.x, SCREEN.y - lift, SCREEN.z + fitDist);
   POSES.screen.look.set(SCREEN.x, SCREEN.y - lift, SCREEN.z);
+  sizeAppScreen((SCREEN.w / (viewH * aspect)) * innerWidth); // the glass's width in CSS pixels at full zoom
   if (cam.to === POSES.screen && cam.t >= 1) camPos.copy(POSES.screen.pos);
 }
 window.addEventListener('resize', resize);
@@ -2129,19 +2299,30 @@ renderer.setAnimationLoop((now) => {
   A.lamp += (lampGoal - A.lamp) * k(3, dt);
   // Closed curtains keep the direct sun out (their shadow does that) and the room a bit dimmer.
   sun.color.copy(C.sun);
-  sun.intensity = A.sunI;
+  sun.intensity = A.sunI * (1 - 0.6 * rainShown); // clouds cover the sun while it rains (last frame's rain amount)
   hemi.color.copy(C.sky);
   hemi.groundColor.copy(C.ground);
   hemi.intensity = A.hemiI * (0.6 + 0.4 * co);
   scene.environmentIntensity = A.env * (0.6 + 0.4 * co);
   glowMat.color.copy(C.glow);
-  glowMat.opacity = A.glowO * (0.35 + 0.65 * co) * WEATHER[seasonName()].glare; // pale pictures (snow, haze) get less glare
+  glowMat.opacity = A.glowO * (0.35 + 0.65 * co) * WEATHER[seasonName()].glare * (1 - 0.6 * rainShown); // pale pictures (snow, haze) get less glare
   viewMat.uniforms.mixNight.value = A.night;
   viewMat.uniforms.tint.value.copy(C.tint);
   viewMat.uniforms.uTime.value = reduced.matches ? 0 : t;
   wxMat.uniforms.uTime.value = reduced.matches ? 0 : t;
   wxMat.uniforms.uLight.value = 1 - 0.55 * A.night; // flakes and petals dim at night
   weather.visible = WEATHER[seasonName()].count > 0 && z < 0.98;
+  // Rain fades with the RAIN switch; the view outside goes duller while it rains.
+  rainShown += ((rainOn() ? 1 : 0) - rainShown) * k(reduced.matches ? 30 : 1.5, dt);
+  const rp = RAIN[seasonName()];
+  rainMat.uniforms.uTime.value = reduced.matches ? 0 : t;
+  rainMat.uniforms.uAlpha.value = rp.alpha * rainShown * (1 - 0.4 * A.night);
+  rainLines.visible = rainShown > 0.01 && z < 0.98;
+  dropsMat.uniforms.uTime.value = reduced.matches ? 0 : t;
+  dropsMat.uniforms.uAmount.value = rp.drops * rainShown;
+  dropsMat.uniforms.uLight.value = 1 - 0.5 * A.night;
+  drops.visible = rainShown > 0.01 && z < 0.98;
+  viewMat.uniforms.uGain.value = WEATHER[seasonName()].gain * (1 - (1 - rp.dim) * rainShown);
   renderer.toneMappingExposure = A.exposure;
   const flick = reduced.matches ? 0 : Math.sin(t * 7.3) * 0.04 + Math.sin(t * 2.1) * 0.03; // a live picture flickers
   tvLight.intensity = A.tv * (1 + flick);
@@ -2150,9 +2331,9 @@ renderer.setAnimationLoop((now) => {
   // The visible sun and its shafts; both fade when the camera is close to the TV so they never
   // cover the screen, and when the curtain is closed.
   sunDisc.material.color.copy(C.disc);
-  sunDisc.material.opacity = co;
+  sunDisc.material.opacity = co * (1 - 0.85 * rainShown);
   sunDisc.scale.setScalar(A.discSize);
-  const shaftBase = A.beamO * (1 - z) * co * co; // gone at the TV, so no band of light crosses the app
+  const shaftBase = A.beamO * (1 - z) * co * co * (1 - 0.7 * rainShown); // gone at the TV, so no band of light crosses the app
   dustMat.uniforms.uOpacity.value = Math.min(0.9, shaftBase * 2.4);
   dustMat.uniforms.uColor.value.copy(C.beam);
   dustMat.uniforms.uTime.value = reduced.matches ? 0 : t;
@@ -2225,7 +2406,7 @@ renderer.setAnimationLoop((now) => {
 
 // For the automated checks.
 const named = { vcr: vcrShell, screen, frame, lamp, sideTable, sofa, longSofa, armchair, table, rug, bookshelf, clock: clockGroup, window: windowGroup, cabinet: cabBody, tv,
-  paintingLeft: paintings[2], paintingRight: paintings[0], paintingFlowers: paintings[1] };
+  paintingLeft: paintings[0], paintingRight: paintings[1] };
 const _part = new THREE.Box3();
 // Bounding box of the solid meshes only: glows, light shafts and invisible click boxes don't count.
 function solidBox(root) {
@@ -2377,6 +2558,28 @@ for (const sx of [-1, 1]) {
 
 // For the automated checks (the room is a module, so they need a handle on it).
 window.__room = {
+  rain: () => ({ on: rainOn(), shown: rainShown, lines: rainLines.visible, drops: drops.visible, amount: dropsMat.uniforms.uAmount.value, alpha: rainMat.uniforms.uAlpha.value, speed: rainMat.uniforms.uSpeed.value }),
+  books: () => bookshelf.userData.books.map(({ x, y, w, h, lean }) => ({ x, y, w, h, lean })),
+  layout: () => {
+    const bx = (o) => new THREE.Box3().setFromObject(o);
+    const c = bx(clockGroup); const l = { min: { x: SIDE.x - SIDE.w / 2 }, max: { x: SIDE.x + SIDE.w / 2 } }; // the table itself (the lamp's light and glow make its box huge)
+    return { paintings: paintings.length, paintingLeft: { x: paintings[0].position.x, ry: paintings[0].rotation.y }, paintingRight: { x: paintings[1].position.x, ry: paintings[1].rotation.y },
+      clock: { x0: c.min.x, x1: c.max.x }, lamp: { x0: l.min.x, x1: l.max.x } };
+  },
+  // Where 6 dust specks are right now (the same formula as the vertex shader, on the CPU), in metres.
+  dustSample: () => {
+    const p = dustGeo.attributes.position.array; const s = dustGeo.attributes.seed.array; const u = dustMat.uniforms.uTime.value; const out = [];
+    for (const i of [0, 17, 40, 63, 88, 89]) {
+      const seed = s[i]; const t = u + seed * 100;
+      const w = [Math.sin(t * 0.37 + seed * 7) + 0.6 * Math.sin(t * 0.91 + seed * 13) + 0.3 * Math.sin(t * 1.73 + seed * 29),
+        0.8 * Math.sin(t * 0.29 + seed * 3) + 0.4 * Math.sin(t * 0.83 + seed * 17),
+        Math.cos(t * 0.33 + seed * 5) + 0.5 * Math.cos(t * 0.77 + seed * 11)];
+      const rise = ((t * (0.012 + 0.012 * seed)) % 0.5) - 0.25;
+      out.push([p[i * 3] + w[0] * 0.09, p[i * 3 + 1] + w[1] * 0.09 + rise, p[i * 3 + 2] + w[2] * 0.09]);
+    }
+    return out;
+  },
+  lite: () => ({ lite: LITE, touch: TOUCH, pr: renderer.getPixelRatio(), shadow: sun.shadow.mapSize.x, dust: DUST_N }),
   season: () => ({ mode: seasonMode, name: seasonName(), shown: shownSeason, weather: weather.visible, count: wxMat.uniforms.uCount.value, heat: viewMat.uniforms.uHeat.value }),
   camera,
   renderer,
@@ -2464,6 +2667,7 @@ window.__room = {
   },
   setShafts: (on) => { for (const d of shafts) d.mesh.visible = on; },
   setDust: (on) => { dust.material.visible = on; },
+  dustAt: (i, time) => { const s = dustGeo.attributes.seed.array[i]; return s; },
   dust: () => ({ n: DUST_N, visible: dust.visible, opacity: dustMat.uniforms.uOpacity.value }),
   setSunDisc: (on) => { sunDisc.visible = on; },
   sound: soundState,

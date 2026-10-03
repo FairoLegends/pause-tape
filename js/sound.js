@@ -4,7 +4,7 @@
 // click, tape going in, TV static). Nothing plays until the player turns SOUND on, which is also the
 // click browsers require before any audio can start. Off by default.
 
-import { soundOn, setPref, reducedMotion } from './prefs.js';
+import { soundOn, musicOn, setPref, reducedMotion } from './prefs.js';
 
 // Rain is a separate switch (learner choice: only when picked), saved in this browser.
 const RAIN_KEY = 'pausetape.rain.v1';
@@ -18,6 +18,7 @@ let noiseBuffer;
 let started = false;
 let lofiTimer = null;
 let rainBus = null;
+let musicBus = null;
 let seasonBus = null;
 let seasonTimer = null;
 let season = 'spring';
@@ -50,6 +51,9 @@ function setup() {
   seasonBus = ctx.createGain();
   seasonBus.gain.value = 1;
   seasonBus.connect(ambience);
+  musicBus = ctx.createGain(); // the lo-fi loop: the MUSIC switch
+  musicBus.gain.value = musicOn() ? 1 : 0;
+  musicBus.connect(ambience);
   noiseBuffer = makeNoise(2);
 }
 
@@ -119,7 +123,7 @@ function chord(notes, t, len) {
   g.gain.exponentialRampToValueAtTime(0.06, t + 0.04);
   g.gain.exponentialRampToValueAtTime(0.02, t + len * 0.6);
   g.gain.exponentialRampToValueAtTime(0.0001, t + len);
-  lp.connect(g).connect(ambience);
+  lp.connect(g).connect(musicBus);
   for (const n of notes) {
     for (const det of [-6, 5]) {
       const o = ctx.createOscillator();
@@ -139,7 +143,7 @@ function kick(t) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.18, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
-  o.connect(g).connect(ambience);
+  o.connect(g).connect(musicBus);
   o.start(t);
   o.stop(t + 0.3);
 }
@@ -152,7 +156,7 @@ function snare(t) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.05, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-  src.connect(hp).connect(g).connect(ambience);
+  src.connect(hp).connect(g).connect(musicBus);
   src.start(t, Math.random(), 0.2);
 }
 function startLofi() {
@@ -577,13 +581,24 @@ export async function setSound(on) {
   return on;
 }
 
-// A saved "on" waits for the player's first click anywhere, since browsers block sound before it.
-export function resumeOnFirstClick() {
+// MUSIC on / off: only the lo-fi loop (learner request). Turning music on also wakes the sound if the
+// master switch was off, since the player clearly wants to hear something.
+export async function setMusic(on) {
+  setPref('music', on);
+  if (on && !soundOn()) await setSound(true);
+  else if (!ctx) await setSound(soundOn());
+  if (musicBus) musicBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.3);
+  return on;
+}
+
+// Sound starts at the first click or key anywhere (browsers block it before one), unless the
+// player turned SOUND off.
+export function resumeOnFirstClick(onStart = () => {}) {
   if (!soundOn()) return;
-  const go = () => { setSound(true); };
+  const go = () => { setSound(true).then(onStart); };
   window.addEventListener('pointerdown', go, { once: true, capture: true });
   window.addEventListener('keydown', go, { once: true, capture: true });
 }
 
-export const soundState = () => ({ on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played }, season, seasonNodes: seasonNodes.length, rain: rainOn(), rainGain: rainBus?.gain.value ?? null });
+export const soundState = () => ({ music: musicOn(), musicGain: musicBus?.gain.value ?? null, on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played }, season, seasonNodes: seasonNodes.length, rain: rainOn(), rainGain: rainBus?.gain.value ?? null });
 export { lofiTimer, tickTimer };
