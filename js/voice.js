@@ -42,14 +42,52 @@ export function canRecord() {
   return Boolean(globalThis.MediaRecorder && navigator.mediaDevices?.getUserMedia && globalThis.isSecureContext);
 }
 
+// A VU meter: an AnalyserNode reads how loud the sound is about 60 times a second and calls
+// onLevel(0..1). For a microphone stream it only listens; for an <audio> element the sound is routed
+// through it to the speakers, which only works once the audio context is running (after a click),
+// so if it isn't, the element is left alone and plays as normal without a meter.
+// Returns a function that stops the meter.
+export async function levelMeter(source, onLevel) {
+  const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AC) return () => {};
+  const ctx = new AC();
+  try { await ctx.resume(); } catch { /* stays suspended */ }
+  const isStream = typeof MediaStream !== 'undefined' && source instanceof MediaStream;
+  if (!isStream && ctx.state !== 'running') { ctx.close(); return () => {}; }
+  const input = isStream ? ctx.createMediaStreamSource(source) : ctx.createMediaElementSource(source);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  input.connect(analyser);
+  if (!isStream) analyser.connect(ctx.destination); // the voice must still reach the speakers
+  const buf = new Float32Array(analyser.fftSize);
+  let level = 0;
+  let raf = 0;
+  let stopped = false;
+  const loop = () => {
+    if (stopped) return;
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    // Speech sits around 0.02 to 0.2 RMS; a log scale spreads that over the meter.
+    const target = Math.max(0, Math.min(1, (Math.log10(rms + 1e-4) + 2.6) / 2.1));
+    level = target > level ? target : level * 0.9; // jumps up, falls back slowly, like a real needle
+    onLevel(level);
+    raf = requestAnimationFrame(loop);
+  };
+  loop();
+  return () => { stopped = true; cancelAnimationFrame(raf); onLevel(0); if (isStream) ctx.close(); };
+}
+
 // One recording at a time. start() asks for the microphone (the browser shows its own prompt the first
 // time), records until stop() or 40 s, and resolves with { blob, ms }.
-export function startRecording({ onTick } = {}) {
+export function startRecording({ onTick, onLevel } = {}) {
   let recorder;
   let stream;
   let timer;
   let ticker;
   let startedAt;
+  let stopMeter = () => {};
   const done = new Promise((resolve, reject) => {
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then((s) => {
       stream = s;
@@ -60,14 +98,16 @@ export function startRecording({ onTick } = {}) {
       recorder.onstop = () => {
         clearTimeout(timer);
         clearInterval(ticker);
+        stopMeter();
         for (const track of stream.getTracks()) track.stop(); // the browser's "recording" light goes off
         const ms = Math.min(VOICE_MAX_MS, Math.round(performance.now() - startedAt));
         resolve({ blob: new Blob(chunks, { type: recorder.mimeType || type || 'audio/webm' }), ms });
       };
+      if (onLevel) levelMeter(stream, onLevel).then((stop) => { stopMeter = stop; if (recorder.state === 'inactive') stop(); });
       recorder.start(250);
       startedAt = performance.now();
       onTick?.(0);
-      ticker = setInterval(() => onTick?.(performance.now() - startedAt), 200);
+      ticker = setInterval(() => onTick?.(performance.now() - startedAt), 100);
       timer = setTimeout(() => recorder.state !== 'inactive' && recorder.stop(), VOICE_MAX_MS);
     }, reject);
   });
@@ -81,4 +121,16 @@ export function startRecording({ onTick } = {}) {
 export function voiceClock(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// Draws a level 0..1 on a .vu element as 12 cells lit from the left (green, then amber, then red),
+// the way a camcorder's audio meter does.
+const VU_CELLS = 12;
+export function drawMeter(el, level) {
+  if (el.children.length !== VU_CELLS) {
+    el.replaceChildren(...Array.from({ length: VU_CELLS }, () => document.createElement('span')));
+  }
+  const lit = Math.round(level * VU_CELLS);
+  [...el.children].forEach((c, i) => c.classList.toggle('is-on', i < lit));
+  el.dataset.level = String(lit);
 }

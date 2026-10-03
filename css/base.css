@@ -597,6 +597,75 @@ body {
   gap: 10px;
 }
 
+/* The audio meter: 12 cells, green then amber then red, like a camcorder's level display. */
+.vu {
+  display: inline-grid;
+  grid-template-columns: repeat(12, 7px);
+  gap: 2px;
+  align-items: end;
+  height: 16px;
+  padding: 2px 3px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #05070c;
+}
+
+.vu[hidden] {
+  display: none;
+}
+
+.vu > span {
+  height: 100%;
+  background: rgba(98, 255, 143, 0.12);
+}
+
+.vu > span.is-on {
+  background: var(--ready);
+  box-shadow: 0 0 4px rgba(98, 255, 143, 0.6);
+}
+
+.vu > span:nth-child(n + 9) {
+  background: rgba(255, 196, 60, 0.12);
+}
+
+.vu > span:nth-child(n + 9).is-on {
+  background: #ffc43c;
+  box-shadow: 0 0 4px rgba(255, 196, 60, 0.6);
+}
+
+.vu > span:nth-child(n + 11) {
+  background: rgba(255, 59, 59, 0.14);
+}
+
+.vu > span:nth-child(n + 11).is-on {
+  background: var(--rec);
+  box-shadow: 0 0 4px rgba(255, 59, 59, 0.6);
+}
+
+/* Time used out of 40 s while recording, or how far LISTEN has got. */
+.voice__bar {
+  display: block;
+  height: 4px;
+  max-width: 420px;
+  border: 1px solid var(--line);
+}
+
+.voice__bar[hidden] {
+  display: none;
+}
+
+.voice__bar > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--rec);
+}
+
+.btn.is-playing ~ .voice__clock,
+[data-voice-listen].is-playing + .btn ~ .voice__clock {
+  color: var(--ready);
+}
+
 .voice__clock {
   color: var(--ink-dim);
   letter-spacing: 0.06em;
@@ -651,6 +720,11 @@ body {
   max-width: 260px;
   height: 6px;
   border: 1px solid var(--line);
+}
+
+/* LISTEN in progress: the bar turns green (red is for recording). */
+.voice:has([data-voice-listen].is-playing) .voice__bar > span {
+  background: var(--ready);
 }
 
 .voice-play__bar > span {

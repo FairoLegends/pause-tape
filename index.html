@@ -89,10 +89,12 @@
                 <span class="field__name">VOICE NOTE <span class="field__hint">OPTIONAL · UP TO 0:40</span></span>
                 <div class="voice__row">
                   <button class="btn btn--rec" type="button" data-voice-rec><span class="ico ico--rec" aria-hidden="true"></span><span data-voice-rec-text>RECORD VOICE</span></button>
-                  <button class="btn" type="button" data-voice-listen hidden><span class="ico ico--play" aria-hidden="true"></span>LISTEN</button>
+                  <button class="btn" type="button" data-voice-listen hidden><span class="ico ico--play" aria-hidden="true"></span><span data-voice-listen-text>LISTEN</span></button>
                   <button class="btn btn--quiet" type="button" data-voice-delete hidden>DELETE</button>
+                  <span class="vu" data-voice-meter aria-hidden="true" hidden></span>
                   <span class="voice__clock" data-voice-clock aria-live="polite"></span>
                 </div>
+                <span class="voice__bar" data-voice-bar aria-hidden="true" hidden><span data-voice-bar-fill></span></span>
                 <p class="voice__note" data-voice-note hidden></p>
               </div>
             </fieldset>
@@ -162,6 +164,7 @@
         <div class="voice-play" data-voice-play hidden>
           <button class="btn" type="button" data-voice-toggle aria-label="Play the voice note"><span class="ico ico--play" aria-hidden="true"></span></button>
           <span class="answer__label">VOICE NOTE</span>
+          <span class="vu" data-voice-play-meter aria-hidden="true"></span>
           <span class="voice-play__bar" aria-hidden="true"><span data-voice-progress></span></span>
           <span class="voice__clock" data-voice-time></span>
         </div>

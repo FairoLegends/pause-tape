@@ -2,7 +2,7 @@
 // (prd.md > Recording a Tape, spec.md > Record Screen).
 
 import { todayLocal, formatVcrDate, isDate } from './tapes.js';
-import { canRecord, startRecording, voiceClock, VOICE_MAX_MS } from './voice.js';
+import { canRecord, startRecording, voiceClock, VOICE_MAX_MS, levelMeter, drawMeter } from './voice.js';
 
 const REQUIRED = ['project', 'returnDate', 'firstStep'];
 const TEXT_FIELDS = ['project', 'stopped', 'firstStep', 'unsure', 'why'];
@@ -23,6 +23,17 @@ export function initRecord(section, { onSave, onBack }) {
   const deleteBtn = section.querySelector('[data-voice-delete]');
   const voiceClockEl = section.querySelector('[data-voice-clock]');
   const voiceNote = section.querySelector('[data-voice-note]');
+  const listenText = section.querySelector('[data-voice-listen-text]');
+  const meter = section.querySelector('[data-voice-meter]');
+  const bar = section.querySelector('[data-voice-bar]');
+  const barFill = section.querySelector('[data-voice-bar-fill]');
+  let stopListenMeter = () => {};
+  // While recording or listening, the meter and the bar show that sound is actually going in or out.
+  function activity(on) {
+    meter.hidden = !on;
+    bar.hidden = !on;
+    if (!on) { drawMeter(meter, 0); barFill.style.width = '0%'; }
+  }
   let voice = null;      // { blob, ms } once recorded
   let recording = null;  // the recording in progress
   let listening = null;  // an Audio element while listening back
@@ -36,6 +47,8 @@ export function initRecord(section, { onSave, onBack }) {
     listenBtn.hidden = !has || Boolean(recording);
     deleteBtn.hidden = !has || Boolean(recording);
     recText.textContent = recording ? 'STOP VOICE' : has ? 'RECORD AGAIN' : 'RECORD VOICE'; // not just STOP: the tape has its own ■ STOP
+    listenText.textContent = listening ? 'PAUSE' : 'LISTEN';
+    listenBtn.classList.toggle('is-playing', Boolean(listening));
     recBtn.classList.toggle('is-recording', Boolean(recording));
     recBtn.setAttribute('aria-pressed', String(Boolean(recording)));
     if (!recording) voiceClockEl.textContent = has ? voiceClock(voice.ms) : '';
@@ -43,27 +56,50 @@ export function initRecord(section, { onSave, onBack }) {
   function stopListening() {
     listening?.pause();
     listening = null;
+    stopListenMeter();
+    stopListenMeter = () => {};
+    if (!recording) activity(false);
+    showVoice();
   }
   recBtn.addEventListener('click', () => {
     if (recording) { recording.stop(); return; }
     stopListening();
     voiceNote.hidden = true;
-    recording = startRecording({ onTick: (ms) => { voiceClockEl.textContent = `${voiceClock(ms)} / ${voiceClock(VOICE_MAX_MS)}`; } });
+    activity(true);
+    recording = startRecording({
+      onTick: (ms) => {
+        voiceClockEl.textContent = `${voiceClock(ms)} / ${voiceClock(VOICE_MAX_MS)}`;
+        barFill.style.width = `${Math.min(100, (ms / VOICE_MAX_MS) * 100)}%`;
+      },
+      onLevel: (level) => drawMeter(meter, level),
+    });
     showVoice();
     recording.done.then((result) => {
       voice = result.ms >= 500 ? result : voice; // a slip of the finger isn't a note
     }, () => {
       voiceNote.textContent = 'NO MICROPHONE (OR ACCESS WAS REFUSED). THE TAPE WORKS WITHOUT IT.';
       voiceNote.hidden = false;
-    }).finally(() => { recording = null; showVoice(); });
+    }).finally(() => { recording = null; activity(false); showVoice(); });
   });
-  listenBtn.addEventListener('click', () => {
+  // LISTEN plays the note back with the meter and a bar; pressing it again (PAUSE) stops it.
+  listenBtn.addEventListener('click', async () => {
     if (!voice) return;
-    stopListening();
+    if (listening) { stopListening(); return; }
     const url = URL.createObjectURL(voice.blob);
-    listening = new Audio(url);
-    listening.addEventListener('ended', () => URL.revokeObjectURL(url), { once: true });
-    listening.play().catch(() => {});
+    const audio = new Audio(url);
+    listening = audio;
+    activity(true);
+    showVoice();
+    const total = voice.ms;
+    audio.addEventListener('timeupdate', () => {
+      const t = audio.currentTime * 1000;
+      barFill.style.width = `${Math.min(100, (t / total) * 100)}%`;
+      voiceClockEl.textContent = `${voiceClock(t)} / ${voiceClock(total)}`;
+    });
+    audio.addEventListener('ended', () => { URL.revokeObjectURL(url); if (listening === audio) { stopListening(); voiceClockEl.textContent = voiceClock(total); } }, { once: true });
+    stopListenMeter = await levelMeter(audio, (level) => drawMeter(meter, level));
+    if (listening !== audio) { stopListenMeter(); return; }
+    audio.play().catch(() => stopListening());
   });
   deleteBtn.addEventListener('click', () => { stopListening(); voice = null; showVoice(); });
   function clearVoice() {

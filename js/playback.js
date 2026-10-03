@@ -5,7 +5,7 @@
 import { formatVcrDate, introLine } from './tapes.js';
 import { tuneIn, settleIn, loadBar, nudge, killMotion } from './motion.js';
 import { loadingWhirr, blip, staticBurst, timerAlarm } from './sound.js';
-import { loadVoice, voiceClock } from './voice.js';
+import { loadVoice, voiceClock, levelMeter, drawMeter } from './voice.js';
 
 // Pacing (spec.md > Implementation details), kept in one place like tuning values on a
 // ScriptableObject.
@@ -57,6 +57,8 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
   const voiceBtn = q('[data-voice-toggle]');
   const voiceBar = q('[data-voice-progress]');
   const voiceTime = q('[data-voice-time]');
+  const voiceMeter = q('[data-voice-play-meter]');
+  let stopMeter = () => {};
   let audio = null;
   let audioUrl = null;
   voiceBtn.addEventListener('click', () => {
@@ -64,6 +66,8 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     if (audio.paused) { if (audio.ended) audio.currentTime = 0; audio.play().catch(() => {}); } else audio.pause();
   });
   function stopVoice() {
+    stopMeter();
+    stopMeter = () => {};
     audio?.pause();
     audio = null;
     if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -90,6 +94,10 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     voiceRow.hidden = false;
     flash(voiceRow);
     sync();
+    const mine = audio;
+    const stop = await levelMeter(audio, (level) => drawMeter(voiceMeter, level));
+    if (audio !== mine) { stop(); return; }
+    stopMeter = stop;
     audio.play().catch(sync); // started from the player's click on the tape, so the browser allows it
   }
   const skip = q('[data-action="skip"]');
