@@ -79,7 +79,7 @@ Source: `scope.md > Inspiration & Identity`.
 - **Playing a tape (VHS mode):** on the shelf, click a READY tape (a tape still waiting says NOT YET). The camera pulls back so the VCR shows, the cassette slides into the VCR, the TV shows the blue loading screen for about 3 seconds, then the camera eases in to the TV screen and the replay starts. BACK / EJECT or Escape returns to the room.
 - **The photo frame is the player's own small decoration:** it starts as an empty slot ("YOUR PHOTO"); the player picks a picture and the **PHOTO panel** opens: a preview in the frame's shape, drag to move the picture, a ZOOM slider (and the mouse wheel), CHANGE, RESET, REMOVE and DONE. The picture is shrunk and kept only in this browser with its zoom and position (localStorage, never uploaded); clicking the frame again reopens the panel. Moved here from Later at the learner's request ("the player can move and zoom their photo, in a new panel").
 - On touch screens (no cursor) and with the browser's reduced-motion setting, the camera stays still (derived from the learner's reduced-motion rule).
-- **Polish (learner list, 2 Oct 2026):** clickable things glow and show their name when the pointer is over them, fading in and out; soft baked shadows ground the furniture; dust drifts in the window light; a light warm grade, vignette and film grain over the room; sound made in code (rain, the clock, quiet lo-fi, VCR click, tape going in, TV static) that only starts after the player turns it on, with a clear mute button; ROOM CONTROLS with REDUCE MOTION and HIGH CONTRAST; a HOW IT WORKS panel with the AI model and prompts; a loading screen with an estimate; phones keep the flat TV with 44 px buttons.
+- **Polish (learner list, 2 Oct 2026):** clickable things glow and show their name when the pointer is over them, fading in and out; soft baked shadows ground the furniture; dust drifts in the window light; a light warm grade, vignette and film grain over the room; sound made in code (rain, the clock, quiet lo-fi, VCR click, tape going in, the loading whirr, a soft tick as letters appear and a blip per answer, the lamp's switch, the curtain sliding, TV static, a timer alarm) that only starts after the player turns it on, with a clear SOUND button in the top-left corner; ROOM CONTROLS with REDUCE MOTION and HIGH CONTRAST; a HOW IT WORKS panel with the AI model and prompts; a loading screen with an estimate; phones keep the flat TV with 44 px buttons.
 - Why: "I want to bring the atmosphere to life, so it feels more interactive and nicer to look at."
 
 ## Features and Behavior
@@ -254,7 +254,6 @@ From `scope.md > Later` and this interview:
 - Voice recording of the note.
 - Longer free-form extra notes.
 - A welcome message/intro when a tape starts playing.
-- VHS mechanism sound effects.
 - Archive and delete tapes.
 
 ## Non-Goals

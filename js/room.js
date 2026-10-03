@@ -15,7 +15,7 @@ import { RenderPass } from '../assets/vendor/addons/postprocessing/RenderPass.js
 import { ShaderPass } from '../assets/vendor/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from '../assets/vendor/addons/postprocessing/OutputPass.js';
 import { reducedMotion, highContrast, soundOn, setPref, onPrefsChange } from './prefs.js';
-import { setSound, vcrClick, tapeIn, staticBurst, resumeOnFirstClick, soundState } from './sound.js';
+import { setSound, vcrClick, tapeIn, staticBurst, soundState, lampSwitch, curtainSlide } from './sound.js';
 
 const stage = document.querySelector('[data-room-stage]');
 const roomUi = document.querySelector('[data-room-ui]');
@@ -465,7 +465,7 @@ for (const ex of [ROD.x0 - 0.06, ROD.x1 + 0.06]) {
 let curtainTarget = 1; // 1 = open, 0 = closed
 let curtainAmount = 1; // what is on screen (eased)
 let curtainOpen = 1; // the same, smoothed again for the look
-const toggleCurtain = () => { curtainTarget = curtainTarget > 0.5 ? 0 : 1; };
+const toggleCurtain = () => { curtainTarget = curtainTarget > 0.5 ? 0 : 1; curtainSlide(curtainTarget === 1); };
 makeClickable(windowGroup, 'window', toggleCurtain);
 windowGroup.userData.when = () => tvMode === 'standby';
 
@@ -844,7 +844,7 @@ const lampHit = hitBox(0.3, 0.6, 0.3);
 lampHit.position.y = 0.3;
 lamp.add(lampBase, lampStem, lampShade, bulb, lampLight, lampGlowSprite, lampHit);
 let lampOverride = null; // null = follows the time of day; true/false = the player's choice
-const toggleLamp = () => { lampOverride = !(lampOverride === null ? lampState().auto > 0.5 : lampOverride); };
+const toggleLamp = () => { lampOverride = !(lampOverride === null ? lampState().auto > 0.5 : lampOverride); lampSwitch(lampOverride); };
 
 // Pull cord under the shade: drag the bead down and let go, or just click the lamp. The cord is a
 // spring (like a SpringJoint): it stretches while held, snaps back past its rest length, wobbles and
@@ -1795,26 +1795,12 @@ window.addEventListener('keydown', (e) => {
 
 const panel = document.querySelector('[data-panel]');
 const howPanel = document.querySelector('[data-how-panel]');
-// A clear mute button always on screen, next to the controls (the SOUND switch inside them is the same).
-const soundQuick = document.querySelector('[data-sound-quick]');
-soundQuick.addEventListener('click', () => setSound(!soundOn()).then(syncButtons));
-resumeOnFirstClick();
+// The always-visible SOUND button (top left) lives in js/app.js; the SOUND switch in the controls is the same setting.
 howPanel.querySelector('[data-how-close]').addEventListener('click', () => { howPanel.hidden = true; });
-function placeSoundButton() { // just left of the controls' toggle, whatever its label's width
-  // With the controls open the panel is wide, so the button sits left of the whole panel instead.
-  const r = (panel.classList.contains('is-hidden') ? panel.querySelector('[data-toggle]') : panel).getBoundingClientRect();
-  const w = Math.max(0, Math.min(innerWidth - 80, Math.round(innerWidth - r.left - 14)));
-  document.documentElement.style.setProperty('--controls-w', `${w}px`);
-}
-window.addEventListener('resize', () => requestAnimationFrame(placeSoundButton));
 function syncButtons() {
-  requestAnimationFrame(placeSoundButton);
   const sb = panel.querySelector('[data-sound]');
   sb.setAttribute('aria-pressed', String(soundOn()));
   sb.textContent = soundOn() ? 'SOUND ON' : 'SOUND OFF';
-  soundQuick.setAttribute('aria-pressed', String(soundOn()));
-  soundQuick.setAttribute('aria-label', soundOn() ? 'Mute sound' : 'Turn sound on');
-  soundQuick.classList.toggle('is-on', soundOn());
   for (const b of panel.querySelectorAll('[data-pref]')) b.setAttribute('aria-pressed', String(b.dataset.pref === 'motion' ? reducedMotion() : highContrast()));
   for (const b of panel.querySelectorAll('[data-time]')) b.setAttribute('aria-pressed', String(b.dataset.time === mode));
 }
@@ -1834,7 +1820,6 @@ panel.addEventListener('click', (e) => {
     tg.setAttribute('aria-expanded', String(open));
     tg.querySelector('[data-toggle-text]').textContent = open ? 'HIDE CONTROLS' : 'ROOM CONTROLS';
   }
-  requestAnimationFrame(placeSoundButton);
   if (e.target.closest('[data-how]')) howPanel.hidden = !howPanel.hidden;
   const sb = e.target.closest('[data-sound]');
   if (sb) setSound(!soundOn()).then(syncButtons);

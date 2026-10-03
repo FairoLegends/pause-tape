@@ -171,6 +171,11 @@
     </div>
     <p class="room-loading__meta"><span data-room-loading-pct>0%</span> · <span data-room-loading-eta>ESTIMATING…</span></p>
   </div>
+  <!-- Sound on / off, top left on every layout (js/app.js). Off until the player turns it on. -->
+  <button class="sound-quick" type="button" data-sound-quick aria-pressed="false" aria-label="Turn sound on">
+    <span class="sound-quick__icon" aria-hidden="true"><span class="sound-quick__speaker"></span><span class="sound-quick__waves"></span></span>
+    <span class="sound-quick__text" data-sound-text>SOUND OFF</span>
+  </button>
   <p class="no-webgl" data-no-webgl hidden role="status">3D ROOM OFF: THIS BROWSER HAS NO WEBGL. THE TAPES WORK THE SAME.</p>
 
   <!-- The room around the TV (prd.md > The room around the TV). js/room.js moves the screen above
@@ -203,9 +208,6 @@
         <button type="button" data-how>HOW IT WORKS</button>
       </div>
     </aside>
-    <button class="sound-quick" type="button" data-sound-quick aria-pressed="false" aria-label="Turn sound on">
-      <span class="sound-quick__speaker" aria-hidden="true"></span><span class="sound-quick__waves" aria-hidden="true"></span>
-    </button>
     <section class="how-panel" data-how-panel hidden aria-labelledby="how-title">
       <button class="how-panel__close" type="button" data-how-close aria-label="Close">×</button>
       <h2 id="how-title">HOW IT WORKS</h2>

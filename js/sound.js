@@ -13,6 +13,7 @@ let effects;
 let noiseBuffer;
 let started = false;
 let lofiTimer = null;
+const played = {}; // how many times each effect has played (for the checks)
 let tickTimer = null;
 
 function makeNoise(seconds = 2) {
@@ -164,6 +165,7 @@ function startLofi() {
 // The VCR's button: a short mechanical clack.
 export function vcrClick() {
   if (!live()) return;
+  played.vcrClick = (played.vcrClick ?? 0) + 1;
   const t = ctx.currentTime;
   for (const [f, at, v] of [[1400, 0, 0.5], [700, 0.035, 0.3]]) {
     const src = ctx.createBufferSource();
@@ -181,50 +183,208 @@ export function vcrClick() {
   }
 }
 
+// One short filtered-noise hit: the building block of clicks, ticks and rattles.
+function hit(at, { f, q = 5, v, dur = 0.05, type = 'bandpass', bus = effects }) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = type;
+  filter.frequency.value = f;
+  filter.Q.value = q;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(v, at + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  src.connect(filter).connect(g).connect(bus);
+  src.start(at, Math.random() * 1.5, dur + 0.03);
+}
+
+// One short tone with a quick fall-off.
+function tone(at, { f, to = f, v, dur, type = 'sine', bus = effects }) {
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f, at);
+  if (to !== f) o.frequency.exponentialRampToValueAtTime(to, at + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(v, at + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  o.connect(g).connect(bus);
+  o.start(at);
+  o.stop(at + dur + 0.02);
+}
+
 // A cassette going in: a plastic slide, then the motor's whirr and a thunk as it seats.
-export function tapeIn() {
+// In the room it waits 0.5 s for the camera to reach the VCR; on the flat TV it plays at once, quicker.
+export function tapeIn({ delay = 0.5, scale = 1 } = {}) {
   if (!live()) return;
+  played.tapeIn = (played.tapeIn ?? 0) + 1;
+  const T = (x) => ctx.currentTime + delay + (x - 0.5) * scale; // the original timings, moved and scaled
+  // The flap of the cassette door clicks open first.
+  hit(T(0.5), { f: 2400, q: 6, v: 0.35, dur: 0.04 });
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(900, T(0.52));
+  bp.frequency.linearRampToValueAtTime(2200, T(1.3));
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, T(0.52));
+  g.gain.linearRampToValueAtTime(0.2, T(0.62));
+  g.gain.linearRampToValueAtTime(0.0001, T(1.35));
+  src.connect(bp).connect(g).connect(effects);
+  src.start(T(0.52), 0, 0.9 * scale + 0.05);
+  const motor = ctx.createOscillator();
+  motor.type = 'sawtooth';
+  motor.frequency.setValueAtTime(70, T(1.2));
+  motor.frequency.linearRampToValueAtTime(110, T(1.9));
+  const mlp = ctx.createBiquadFilter();
+  mlp.type = 'lowpass';
+  mlp.frequency.value = 400;
+  const mg = ctx.createGain();
+  mg.gain.setValueAtTime(0.0001, T(1.2));
+  mg.gain.linearRampToValueAtTime(0.06, T(1.35));
+  mg.gain.linearRampToValueAtTime(0.0001, T(2.4));
+  motor.connect(mlp).connect(mg).connect(effects);
+  motor.start(T(1.2));
+  motor.stop(T(2.5));
+  // The thunk as it seats, and the tray locking down with two small clicks.
+  tone(T(1.35), { f: 160, to: 60, v: 0.3, dur: 0.2 });
+  hit(T(1.36), { f: 900, q: 3, v: 0.25, dur: 0.06 });
+  hit(T(1.62), { f: 1700, q: 7, v: 0.18, dur: 0.035 });
+  hit(T(1.7), { f: 1300, q: 7, v: 0.14, dur: 0.035 });
+}
+
+// The blue loading screen: the VCR's motor and spinning head hum while the tape is read, a soft tick
+// as each of the 20 blocks lights (the same timing as motion.js loadBar), and a clunk at the end.
+export function loadingWhirr(seconds) {
+  if (!live()) return;
+  played.loadingWhirr = (played.loadingWhirr ?? 0) + 1;
+  const t = ctx.currentTime;
+  const end = t + seconds;
+  const motor = ctx.createOscillator();
+  motor.type = 'sawtooth';
+  motor.frequency.setValueAtTime(48, t);
+  motor.frequency.linearRampToValueAtTime(60, t + Math.min(0.6, seconds * 0.3));
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 260;
+  const mg = ctx.createGain();
+  mg.gain.setValueAtTime(0.0001, t);
+  mg.gain.linearRampToValueAtTime(0.05, t + 0.2);
+  mg.gain.setValueAtTime(0.05, end - 0.15);
+  mg.gain.linearRampToValueAtTime(0.0001, end);
+  motor.connect(lp).connect(mg).connect(effects);
+  motor.start(t);
+  motor.stop(end + 0.05);
+  const head = ctx.createOscillator(); // the video head drum: a faint, rising whine
+  head.frequency.setValueAtTime(420, t);
+  head.frequency.linearRampToValueAtTime(600, t + seconds * 0.5);
+  const hg = ctx.createGain();
+  hg.gain.setValueAtTime(0.0001, t);
+  hg.gain.linearRampToValueAtTime(0.012, t + 0.4);
+  hg.gain.setValueAtTime(0.012, end - 0.15);
+  hg.gain.linearRampToValueAtTime(0.0001, end);
+  head.connect(hg).connect(effects);
+  head.start(t);
+  head.stop(end + 0.05);
+  const hiss = ctx.createBufferSource(); // tape hiss under it
+  hiss.buffer = noiseBuffer;
+  hiss.loop = true;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 4000;
+  const sg = ctx.createGain();
+  sg.gain.setValueAtTime(0.0001, t);
+  sg.gain.linearRampToValueAtTime(0.025, t + 0.3);
+  sg.gain.setValueAtTime(0.025, end - 0.15);
+  sg.gain.linearRampToValueAtTime(0.0001, end);
+  hiss.connect(hp).connect(sg).connect(effects);
+  hiss.start(t);
+  hiss.stop(end + 0.05);
+  const step = (seconds * 0.9) / 20;
+  for (let i = 1; i <= 20; i++) hit(t + i * step, { f: 2900, q: 10, v: 0.07, dur: 0.025 });
+  hit(end - 0.02, { f: 700, q: 3, v: 0.2, dur: 0.08 });
+}
+
+// Text appearing on the TV, letter by letter: a very soft, slightly varied tick (at most ~30 a second).
+let lastTick = 0;
+export function textTick() {
+  if (!live()) return;
+  played.textTick = (played.textTick ?? 0) + 1;
+  const t = ctx.currentTime;
+  if (t - lastTick < 0.032) return;
+  lastTick = t;
+  hit(t, { f: 3200 + Math.random() * 1400, q: 9, v: 0.035, dur: 0.018 });
+}
+
+// A new answer or line arriving: a short two-step CRT blip. The first step gets a brighter one.
+export function blip(kind = 'answer') {
+  if (!live()) return;
+  played.blip = (played.blip ?? 0) + 1;
+  const t = ctx.currentTime;
+  const [a, b] = kind === 'first' ? [990, 1480] : [740, 990];
+  tone(t, { f: a, v: 0.05, dur: 0.07, type: 'square', bus: effects });
+  tone(t + 0.075, { f: b, v: 0.04, dur: 0.09, type: 'square', bus: effects });
+}
+
+// The TV changing picture (any screen change): a soft low thump with a breath of static.
+export function screenChange() {
+  if (!live()) return;
+  played.screenChange = (played.screenChange ?? 0) + 1;
+  const t = ctx.currentTime;
+  tone(t, { f: 110, to: 48, v: 0.12, dur: 0.14 });
+  hit(t, { f: 5000, q: 0.7, v: 0.05, dur: 0.12, type: 'highpass' });
+}
+
+// The lamp's pull switch: click down and up; turning on adds the faint ping of the bulb warming.
+export function lampSwitch(on) {
+  if (!live()) return;
+  played.lampSwitch = (played.lampSwitch ?? 0) + 1;
+  const t = ctx.currentTime;
+  hit(t, { f: on ? 2600 : 2200, q: 8, v: 0.4, dur: 0.035 });
+  hit(t + 0.07, { f: on ? 1900 : 1600, q: 8, v: 0.28, dur: 0.03 });
+  if (on) tone(t + 0.08, { f: 120, v: 0.025, dur: 0.35 }); // a short mains hum as the bulb lights
+}
+
+// The curtain: a fabric swish along the rod and the rings rattling as they slide. Opening rises in
+// pitch, closing falls.
+export function curtainSlide(opening) {
+  if (!live()) return;
+  played.curtainSlide = (played.curtainSlide ?? 0) + 1;
   const t = ctx.currentTime;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuffer;
   const bp = ctx.createBiquadFilter();
   bp.type = 'bandpass';
-  bp.frequency.setValueAtTime(900, t + 0.5);
-  bp.frequency.linearRampToValueAtTime(2200, t + 1.3);
+  bp.Q.value = 0.8;
+  bp.frequency.setValueAtTime(opening ? 700 : 1500, t);
+  bp.frequency.linearRampToValueAtTime(opening ? 1500 : 700, t + 1.1);
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, t + 0.5);
-  g.gain.linearRampToValueAtTime(0.18, t + 0.6);
-  g.gain.linearRampToValueAtTime(0.0001, t + 1.35);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.16, t + 0.25);
+  g.gain.linearRampToValueAtTime(0.06, t + 0.8);
+  g.gain.linearRampToValueAtTime(0.0001, t + 1.3);
   src.connect(bp).connect(g).connect(effects);
-  src.start(t + 0.5, 0, 0.9);
-  const motor = ctx.createOscillator();
-  motor.type = 'sawtooth';
-  motor.frequency.setValueAtTime(70, t + 1.2);
-  motor.frequency.linearRampToValueAtTime(110, t + 1.9);
-  const mlp = ctx.createBiquadFilter();
-  mlp.type = 'lowpass';
-  mlp.frequency.value = 400;
-  const mg = ctx.createGain();
-  mg.gain.setValueAtTime(0.0001, t + 1.2);
-  mg.gain.linearRampToValueAtTime(0.05, t + 1.35);
-  mg.gain.linearRampToValueAtTime(0.0001, t + 2.4);
-  motor.connect(mlp).connect(mg).connect(effects);
-  motor.start(t + 1.2);
-  motor.stop(t + 2.5);
-  const thunk = ctx.createOscillator();
-  thunk.frequency.setValueAtTime(160, t + 1.35);
-  thunk.frequency.exponentialRampToValueAtTime(60, t + 1.5);
-  const tg = ctx.createGain();
-  tg.gain.setValueAtTime(0.25, t + 1.35);
-  tg.gain.exponentialRampToValueAtTime(0.0001, t + 1.55);
-  thunk.connect(tg).connect(effects);
-  thunk.start(t + 1.35);
-  thunk.stop(t + 1.6);
+  src.start(t, Math.random(), 1.4);
+  for (let i = 0; i < 9; i++) { // the rings: small metallic clicks, bunched early like a real pull
+    const at = t + 0.05 + (i / 9) ** 1.4 * 0.95 + Math.random() * 0.04;
+    hit(at, { f: 4600 + Math.random() * 1800, q: 14, v: 0.06 + Math.random() * 0.04, dur: 0.03 });
+  }
+}
+
+// The 10-minute timer running out: three soft beeps, like a VCR's alarm.
+export function timerAlarm() {
+  if (!live()) return;
+  played.timerAlarm = (played.timerAlarm ?? 0) + 1;
+  const t = ctx.currentTime;
+  for (let i = 0; i < 3; i++) tone(t + i * 0.32, { f: 1320, v: 0.07, dur: 0.16, type: 'square' });
 }
 
 // TV static: a hiss burst, like the picture cutting between inputs.
 export function staticBurst(seconds = 0.35) {
   if (!live()) return;
+  played.staticBurst = (played.staticBurst ?? 0) + 1;
   const t = ctx.currentTime;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuffer;
@@ -272,5 +432,5 @@ export function resumeOnFirstClick() {
   window.addEventListener('keydown', go, { once: true, capture: true });
 }
 
-export const soundState = () => ({ on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0 });
+export const soundState = () => ({ on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played } });
 export { lofiTimer, tickTimer };

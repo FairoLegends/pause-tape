@@ -6,6 +6,7 @@
 // timing with a stepped, mechanical ease for the scramble).
 
 import { reducedMotion } from './prefs.js';
+import { textTick } from './sound.js';
 
 const gsap = globalThis.gsap;
 const Scramble = globalThis.ScrambleTextPlugin;
@@ -22,10 +23,13 @@ export function tuneIn(textEl, { duration } = {}) {
   if (!enabled() || !Scramble) return null;
   const text = textEl.textContent;
   const time = duration ?? Math.min(1.1, 0.35 + text.length * 0.012);
+  let shown = '';
   return gsap.fromTo(textEl, { opacity: 0.35 }, {
     opacity: 1,
     duration: time,
     ease: 'none',
+    // A soft tick each time the letters on screen change, like a character generator typing.
+    onUpdate() { if (textEl.textContent !== shown) { shown = textEl.textContent; textTick(); } },
     scrambleText: { text, chars: CHARS, speed: 0.6, revealDelay: 0.08, tweenLength: false },
   });
 }

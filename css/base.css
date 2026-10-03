@@ -721,6 +721,114 @@ body {
 
 /* ── Small screens (judges on a phone) ────────────────────────── */
 
+/* ── SOUND button: top left on every layout (js/app.js). A speaker drawn in CSS, waves when on, a red
+   slash when off, and the words beside it, so it's clear at a glance. ── */
+
+.sound-quick {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px 0 8px;
+  border: 1px solid rgba(217, 222, 232, 0.3);
+  border-radius: 8px;
+  background: rgba(5, 7, 12, 0.88);
+  color: #e8ecf3;
+  font: inherit;
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.sound-quick:hover,
+.sound-quick:focus-visible {
+  border-color: rgba(217, 222, 232, 0.7);
+}
+
+.sound-quick.is-on {
+  border-color: rgba(120, 220, 140, 0.55);
+}
+
+.sound-quick__icon {
+  position: relative;
+  width: 26px;
+  height: 26px;
+}
+
+.sound-quick__speaker {
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  width: 9px;
+  height: 10px;
+  background: currentColor;
+  clip-path: polygon(0 30%, 40% 30%, 100% 0, 100% 100%, 40% 70%, 0 70%);
+}
+
+.sound-quick__waves {
+  position: absolute;
+  left: 11px;
+  top: 5px;
+  width: 10px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-color: transparent currentColor transparent transparent;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.sound-quick.is-on .sound-quick__waves {
+  opacity: 1;
+}
+
+.sound-quick:not(.is-on) .sound-quick__icon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 26px;
+  border-top: 2px solid var(--rec);
+  transform: rotate(-40deg);
+}
+
+/* In the TV (room zoomed in) it steps back a little, but stays usable. */
+.zoomed .sound-quick {
+  opacity: 0.6;
+}
+
+.zoomed .sound-quick:hover,
+.zoomed .sound-quick:focus-visible {
+  opacity: 1;
+}
+
+/* A narrow screen: the icon only (the label is still read out), in a strip above the TV so it covers
+   none of the TV's own text. */
+@media (max-width: 640px) {
+  .sound-quick {
+    top: 4px;
+    left: 6px;
+    padding: 0 9px;
+  }
+
+  body {
+    padding-top: 52px;
+  }
+
+  .sound-quick__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
 /* Touch screens: every button and the tapes at least 44 px tall (Apple / WCAG target size). */
 @media (pointer: coarse) {
   .btn,
@@ -758,7 +866,7 @@ body {
 
   .tv__screen {
     aspect-ratio: auto;
-    height: calc(100dvh - 60px);
+    height: calc(100dvh - 100px); /* room for the SOUND strip above the TV */
   }
 
   .record__group--label {

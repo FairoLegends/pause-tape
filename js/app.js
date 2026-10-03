@@ -10,7 +10,8 @@ import { initPlayback, PACE } from './playback.js';
 import { startCrt } from './crt.js';
 import { switchGlitch } from './motion.js';
 import { downloadIcs } from './ics.js';
-import { reducedMotion, highContrast } from './prefs.js';
+import { reducedMotion, highContrast, soundOn, onPrefsChange } from './prefs.js';
+import { setSound, resumeOnFirstClick, screenChange, blip, tapeIn, vcrClick } from './sound.js';
 
 // --vhs per screen: css/vhs.css and the js/crt.js shader both read it, like VHSDriver's float.
 const VHS = { shelf: 0.5, record: 0.3, saved: 0.5, early: 0.5, blue: 1, playback: 1, backonit: 0.5 };
@@ -73,6 +74,10 @@ function show(name, { force = false } = {}) {
   if (name === 'shelf') drawShelf();
   hooks[name]?.enter();
   switchGlitch(from, screens[name], { force });
+  if (from && from !== screens[name]) {
+    screenChange();
+    if (name === 'saved' || name === 'backonit' || name === 'early') setTimeout(() => blip(name === 'early' ? 'answer' : 'first'), 120);
+  }
 }
 
 // Tape states are worked out from today's date on every draw, so a locked tape
@@ -89,7 +94,11 @@ function drawShelf() {
 // In the room a tape goes into the VCR first; the app's playback starts once it is in.
 function play(tape, mode) {
   const start = () => playback.startPlayback(tape, mode);
-  if (room) room.playTape(tape.project, start); else start();
+  if (room) { room.playTape(tape.project, start); return; }
+  // The flat TV has no VCR to look at, so the tape's sound goes in quickly under the blue screen.
+  vcrClick();
+  tapeIn({ delay: 0, scale: 0.45 });
+  start();
 }
 
 // READY plays, locked asks first, completed replays (spec.md > Tape Shelf).
@@ -131,6 +140,20 @@ startCrt(document.querySelector('.tv__screen'), {
 });
 
 show('shelf');
+
+// Sound on / off: one button in the top-left corner, in the room and on the flat TV. Sound is off
+// until the player turns it on (that click is also what browsers need before any audio can play).
+const soundBtn = document.querySelector('[data-sound-quick]');
+function syncSoundButton() {
+  soundBtn.setAttribute('aria-pressed', String(soundOn()));
+  soundBtn.setAttribute('aria-label', soundOn() ? 'Mute sound' : 'Turn sound on');
+  soundBtn.querySelector('[data-sound-text]').textContent = soundOn() ? 'SOUND ON' : 'SOUND OFF';
+  soundBtn.classList.toggle('is-on', soundOn());
+}
+soundBtn.addEventListener('click', () => { setSound(!soundOn()).then(syncSoundButton); });
+onPrefsChange(syncSoundButton);
+syncSoundButton();
+resumeOnFirstClick();
 
 // The room around the TV (prd.md > The room around the TV): a laptop or desktop window with WebGL.
 // On a phone, or if anything fails, the app stays the flat TV above, which works on its own.

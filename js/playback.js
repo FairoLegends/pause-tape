@@ -4,6 +4,7 @@
 
 import { formatVcrDate } from './tapes.js';
 import { tuneIn, settleIn, loadBar, nudge, killMotion } from './motion.js';
+import { loadingWhirr, blip, staticBurst, timerAlarm } from './sound.js';
 
 // Pacing (spec.md > Implementation details), kept in one place like tuning values on a
 // ScriptableObject.
@@ -77,6 +78,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     counter.textContent = counterText(0);
     show('blue');
     loadBar(screens.blue.querySelector('[data-blue-bar]'), PACE.blueMs / 1000);
+    loadingWhirr(PACE.blueMs / 1000); // the VCR reads the tape: motor hum, a tick per block
     later(s, PACE.blueMs, () => {
       show('playback');
       s.ticker = setInterval(() => tick(s), 250);
@@ -131,6 +133,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     firstText.textContent = s.tape.firstStep;
     firstBox.hidden = false;
     if (glitch) {
+      blip('first');
       flash(firstBox);
       settleIn(firstBox);
       tuneIn(firstText);
@@ -151,7 +154,7 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
     if (s.timerStart !== null) {
       const { text, over } = timerText(now - s.timerStart);
       timer.textContent = text;
-      if (over && !timer.classList.contains('timer--over')) nudge(timer);
+      if (over && !timer.classList.contains('timer--over')) { nudge(timer); timerAlarm(); }
       timer.classList.toggle('timer--over', over);
     }
   }
@@ -176,7 +179,9 @@ export function initPlayback(screens, { show, onBackOnIt, onStop }) {
 
   function reveal(node, glitch) {
     list.append(node);
+    if (!glitch) staticBurst(0.25); // an empty answer: a short hiss with its NO SIGNAL panel
     if (glitch) {
+      blip();
       flash(node);
       settleIn(node);
       tuneIn(node.querySelector('.answer__text'));
