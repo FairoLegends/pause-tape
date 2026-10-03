@@ -38,11 +38,12 @@ document.fonts.load('44px VT323'); // canvas text doesn't make the browser load 
 // shadow map, fewer dust specks and drops, and no SVG bend on the app screen (CSS look only).
 const TOUCH = window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(pointer: fine)').matches;
 const LITE = TOUCH || params.has('lite');
+if (LITE) document.documentElement.classList.add('room-lite');
 
 // alpha: the TV glass is drawn as a see-through hole, and the app's HTML shows through it.
 const renderer = new THREE.WebGLRenderer({ antialias: !LITE, alpha: true, powerPreference: 'high-performance' });
 renderer.setClearColor(0x000000, 0);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1.5 : 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1.25 : 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
@@ -689,6 +690,9 @@ vcr.add(vcrHit);
 const vcrGlow = new THREE.PointLight(0x62ff8f, 0, 0.9, 2);
 vcrGlow.position.set(CAB.x + 0.58, CAB.h + 0.08, CAB.z + 0.35);
 scene.add(vcrGlow);
+// Phones: no VCR glow light (a light costs every lit pixel of the room, and this one is a faint 0.9 m glow;
+// the LED itself still shines). A hidden light is left out of the shaders entirely.
+if (LITE) vcrGlow.visible = false;
 
 // Photo frame on the cabinet, just left of the TV. The picture is a slot: "YOUR PHOTO" until
 // the player's own photo goes in (a later feature).
@@ -1358,7 +1362,7 @@ sun.target.position.copy(SUN_AIM);
 sun.castShadow = true;
 // The shadow box hugs the room (5 x 3.6 m seen along the sun), so a 1024 map is as sharp as the old
 // 2048 one over 7 m, at a quarter of the memory and fill. radius softens the edge like a real window.
-sun.shadow.mapSize.set(LITE ? 512 : 1024, LITE ? 512 : 1024);
+sun.shadow.mapSize.set(LITE ? 512 : 1024, LITE ? 512 : 1024); // phones: also drawn once and never redrawn (see the loop)
 scene.add(sun, sun.target);
 sun.shadow.bias = -0.0005;
 sun.shadow.normalBias = 0.025;
@@ -1439,7 +1443,8 @@ const SHAFTS = [
   { u: -0.3, v: 0.2, fan: -0.2, w: 0.14, len: 2.0, k: 0.75, ph: 3.1 },
   { u: -0.36, v: 0.12, fan: -0.33, w: 0.11, len: 1.7, k: 0.6, ph: 4.4 },
 ];
-const shafts = SHAFTS.map((d) => {
+// Phones: the two strongest rays only (each is a big additive layer over the wall).
+const shafts = (LITE ? SHAFTS.slice(0, 2) : SHAFTS).map((d) => {
   const geo = new THREE.PlaneGeometry(1, 1);
   geo.translate(0, 0.5, 0); // the ribbon grows from its start point along +Y
   const mat = new THREE.MeshBasicMaterial({
@@ -1471,7 +1476,7 @@ function aimShaft(d) {
 // call (Points), moved in the vertex shader so the CPU does nothing per frame. They only show where
 // the light is (brightest along the shafts' axis), fade with the shafts, and stand still with
 // reduced motion.
-const DUST_N = LITE ? 90 : 180;
+const DUST_N = LITE ? 40 : 180; // phones: fewer specks (each is a blended sprite; the learner allowed fewer effects)
 const dustGeo = new THREE.BufferGeometry();
 {
   const r = rng(77);
@@ -1609,7 +1614,7 @@ const RAIN = {
   summer: { speed: 8.0, len: 0.16, color: 0xd6e2ee, alpha: 0.55, amount: 1, drops: 1, dim: 0.78 },
   dry: { speed: 5.5, len: 0.09, color: 0xc2c8cc, alpha: 0.35, amount: 0.45, drops: 0.5, dim: 0.88 },
 };
-const RAIN_N = LITE ? 220 : 420;
+const RAIN_N = LITE ? 160 : 420;
 const rainGeo = new THREE.BufferGeometry();
 {
   const rr = rng(57);
@@ -1656,6 +1661,7 @@ scene.add(rainLines);
 // Drops on the pane: little beads that slide down in jerks and leave a faint trail, drawn procedurally
 // in a fragment shader (no texture), so they never repeat in an obvious way.
 const dropsMat = new THREE.ShaderMaterial({
+  defines: { DROP_LAYERS: LITE ? 1 : 3 }, // phones: one layer of running drops (the shader runs per pixel of the pane)
   transparent: true, depthWrite: false, toneMapped: false,
   uniforms: { uTime: { value: 0 }, uAmount: { value: 0 }, uLight: { value: 1 }, uAspect: { value: WIN.w / WIN.h } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -1668,7 +1674,7 @@ const dropsMat = new THREE.ShaderMaterial({
       // across: a clear bead with a bright rim and a darker middle, like real water on glass)
       float rim = 0.0;
       float body = 0.0;
-      for (int L = 0; L < 3; L++) {
+      for (int L = 0; L < DROP_LAYERS; L++) {
         float cols = 22.0 + float(L) * 14.0;
         float cx = floor(uv.x * cols);
         float id = cx + float(L) * 57.0;
@@ -1906,9 +1912,14 @@ function startCut(toCovered) {
   cutT = reduced.matches ? Infinity : 0; // reduced motion: a plain cut
 }
 let cutHold = null; // checks only
+let tvDrawAt = -1;
 function drawScreen(t, dt) {
   cutT = cutHold ?? cutT + dt;
   const active = cutT < CUT_FREEZE + CUT_TEAR;
+  // Phones: the standby picture is redrawn 15 times a second (each redraw re-uploads the texture);
+  // the glitch cut still runs every frame.
+  if (LITE && !active && t - tvDrawAt < 1 / 15) return;
+  tvDrawAt = t;
   // Going out, the picture freezes: it isn't redrawn. Otherwise draw it live (coming in it is drawn but
   // not shown during the freeze, while the app's own screen holds still).
   if (covered) drawPicture(t);
@@ -1944,7 +1955,14 @@ function drawScreen(t, dt) {
   tvTex.texture.needsUpdate = true;
 }
 
+let vcrText = '';
 function drawVcrDisplay(t) {
+  const d = new Date();
+  const colon = Math.floor(t) % 2 ? ':' : ' ';
+  const label = { app: 'MENU', insert: 'LOAD', loading: 'LOAD', play: 'PLAY' }[tvMode];
+  const text = label ?? `${String(d.getHours()).padStart(2, '0')}${colon}${String(d.getMinutes()).padStart(2, '0')}`;
+  if (text === vcrText) return; // the texture is uploaded only when the digits change (once a second)
+  vcrText = text;
   const c = vcrDisplay.canvas;
   const g = c.getContext('2d');
   g.fillStyle = '#05070a';
@@ -1952,10 +1970,7 @@ function drawVcrDisplay(t) {
   g.fillStyle = '#62ff8f';
   g.font = '44px VT323, monospace';
   g.textAlign = 'center';
-  const d = new Date();
-  const colon = Math.floor(t) % 2 ? ':' : ' ';
-  const label = { app: 'MENU', insert: 'LOAD', loading: 'LOAD', play: 'PLAY' }[tvMode];
-  g.fillText(label ?? `${String(d.getHours()).padStart(2, '0')}${colon}${String(d.getMinutes()).padStart(2, '0')}`, c.width / 2, 48);
+  g.fillText(text, c.width / 2, 48);
   vcrDisplay.texture.needsUpdate = true;
 }
 
@@ -2224,7 +2239,40 @@ const hoverTint = new THREE.Color(0.07, 0.055, 0.03);
 let frameNo = 0;
 let shadowsDirty = true; // draw the shadow map once at the start
 
+// Phones (LITE): draw at most 30 frames a second (an even 30 looks smoother than a jumpy 40-50 and
+// halves the work, so the phone stays cool), and lower the resolution step by step while frames take too
+// long, like dynamic resolution in a console game (learner: the room stuttered on a real phone).
+let liteLast = -1;
+let lastClothKey = '';
+let wasMoving = false;
+let liteSlow = 0;
+let liteFrames = 0;
+const LITE_MIN_PR = 0.85;
+function liteSkip(now) {
+  if (!LITE) return false;
+  if (!params.has('uncapped') && liteLast >= 0 && now - liteLast < 1000 / 30 - 4) return true; // ?uncapped: checks only
+  const spent = liteLast >= 0 ? now - liteLast : 33;
+  liteLast = now;
+  liteFrames++;
+  liteSlow = liteSlow * 0.95 + (spent > 45 ? 0.05 : 0); // share of slow frames, smoothed
+  if (liteFrames > 45 && liteSlow > 0.35 && renderer.getPixelRatio() > LITE_MIN_PR + 0.01) {
+    renderer.setPixelRatio(Math.max(LITE_MIN_PR, renderer.getPixelRatio() - 0.15));
+    resize();
+    liteFrames = 0;
+    liteSlow = 0;
+  }
+  return false;
+}
+
+let drawnFrames = 0; // checks only
 renderer.setAnimationLoop((now) => {
+  if (liteSkip(now)) return;
+  drawnFrames++;
+  const cpu0 = performance.now();
+  try { roomFrame(now); } finally { cpuMs = cpuMs * 0.95 + (performance.now() - cpu0) * 0.05; }
+});
+let cpuMs = 0; // average JS time of a drawn frame (checks only)
+function roomFrame(now) {
   timer.update(now);
   // Never negative: the first frame's time can come before the timer's start, which would drag the
   // camera back toward its empty starting pose for a moment.
@@ -2286,9 +2334,13 @@ renderer.setAnimationLoop((now) => {
   const lagGoal = -cloth.vel * 0.22;
   cloth.lagVel += ((lagGoal - cloth.lag) * 70 - cloth.lagVel * 7) * dt;
   cloth.lag = reduced.matches ? 0 : THREE.MathUtils.clamp(cloth.lag + cloth.lagVel * dt, -0.12, 0.12);
-  const stillCloth = reduced.matches;
-  shapeCurtain(curtainL, pw, t, stillCloth, hoverAmt.window);
-  shapeCurtain(curtainR, pw, t, stillCloth, hoverAmt.window);
+  const stillCloth = reduced.matches || LITE; // phones: no breathing folds (a costly reshape every frame)
+  const clothKey = `${pw.toFixed(4)}|${cloth.lag.toFixed(4)}|${hoverAmt.window.toFixed(3)}`;
+  if (!stillCloth || clothKey !== lastClothKey) {
+    shapeCurtain(curtainL, pw, t, stillCloth, hoverAmt.window);
+    shapeCurtain(curtainR, pw, t, stillCloth, hoverAmt.window);
+    lastClothKey = clothKey;
+  }
 
   // Light glides toward the current period over a few seconds, like the sky changing.
   if (T.name !== currentName()) setTarget(currentName());
@@ -2390,19 +2442,21 @@ renderer.setAnimationLoop((now) => {
   // while the curtain slides (it is the one big thing that casts a moving shadow); never while the
   // camera is inside the TV. The cord, the pendulum and the cloth's breathing are too small to matter.
   const moving = Math.abs(curtainTarget - curtainAmount) > 0.002 || Math.abs(cloth.lag) > 0.004;
-  if (shadowsDirty || (close < 0.98 && moving)) {
+  if (LITE && wasMoving && !moving) shadowsDirty = true; // the curtain has stopped: redraw its shadow once
+  wasMoving = moving;
+  if (shadowsDirty || (close < 0.98 && moving && !LITE)) { // phones: the curtain's moving shadow is skipped (drawn once, again when it stops)
     renderer.shadowMap.needsUpdate = true;
     shadowsDirty = false;
   }
   // Grade, vignette and grain over the room; they fade out as the camera goes into the TV, where the
   // app has its own VHS look. Still grain with reduced motion; all off in high contrast.
-  const post = highContrast() ? 0 : 1 - THREE.MathUtils.smoothstep(close, 0.6, 1);
+  const post = highContrast() || LITE ? 0 : 1 - THREE.MathUtils.smoothstep(close, 0.6, 1); // phones: no grade pass
   gradePass.uniforms.uAmount.value = post;
   gradePass.uniforms.uTime.value = reduced.matches ? 0 : t;
   if (post > 0.001) composer.render(dt);
   else renderer.render(scene, camera); // in the TV: skip the extra pass
   css.render(cssScene, camera);
-});
+}
 
 // For the automated checks.
 const named = { vcr: vcrShell, screen, frame, lamp, sideTable, sofa, longSofa, armchair, table, rug, bookshelf, clock: clockGroup, window: windowGroup, cabinet: cabBody, tv,
@@ -2579,6 +2633,11 @@ window.__room = {
     }
     return out;
   },
+  drawnCount: () => drawnFrames,
+  cpuMs: () => cpuMs,
+  merged: () => mergeInfo,
+  scene: () => scene,
+  info: () => { let meshes = 0, castS = 0; scene.traverseVisible((o) => { if (o.isMesh || o.isLine || o.isPoints || o.isSprite) { meshes++; if (o.castShadow) castS++; } }); return { meshes, castShadow: castS, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, programs: renderer.info.programs.length, textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries, pr: renderer.getPixelRatio(), size: [renderer.domElement.width, renderer.domElement.height] }; },
   lite: () => ({ lite: LITE, touch: TOUCH, pr: renderer.getPixelRatio(), shadow: sun.shadow.mapSize.x, dust: DUST_N }),
   season: () => ({ mode: seasonMode, name: seasonName(), shown: shownSeason, weather: weather.visible, count: wxMat.uniforms.uCount.value, heat: viewMat.uniforms.uHeat.value }),
   camera,
@@ -2719,6 +2778,7 @@ export function startRoom({ onLeave } = {}) {
     },
     // The app's blue loading screen is over and the replay begins: ease into the TV.
     loadingDone() { if (tvMode === 'loading') setMode('play'); },
+    nearTv: () => close > 0.3, // the camera is at the TV or on its way (the app reads this)
     enterTv() { if (tvMode === 'standby') setMode('app'); },
     toRoom() { leaveTv(); },
     // The app's playback ended (STOP, or leaving the BACK ON IT screen): the camera pulls back, the
@@ -2745,6 +2805,91 @@ export function setupCrtBend() {
   document.documentElement.classList.add('crt-bend');
   return true;
 }
+
+// ── Phones: merge everything that never moves (like Unity's static batching) ─────────────
+// The room is ~185 separate meshes, and a phone CPU spends most of each frame just issuing them (one
+// draw call each, twice with the shadow pass). On LITE, every opaque mesh that never moves, never changes
+// its material and can't be clicked is baked into its world position and merged with the others that
+// look the same, so the frame is a few dozen draws. Desktop keeps the separate meshes.
+const MUTABLE_MATS = new Set([glowMat, curtainMat, ceiling.material, shadeMat, bulb.material, vcrLedMat, vcrShell.material, standbyMat, pic.material, tvSheen.material]);
+function insideMoving(o) { // moves, is clicked, or is switched on and off at run time
+  const moving = new Set([vcr, cassette, lamp, curtainL, curtainR, screen, frame, windowGroup, clockGroup.userData.hourHand, clockGroup.userData.minuteHand, clockGroup.userData.pendulum]);
+  for (let p = o; p; p = p.parent) if (moving.has(p) || p.userData.click) return true;
+  return false;
+}
+function matKey(m) {
+  if (MUTABLE_MATS.has(m) || m.map || m.normalMap || m.roughnessMap || m.emissiveMap || m.alphaMap || m.aoMap) return m.uuid;
+  return [m.type, m.color?.getHex(), m.roughness, m.metalness, m.emissive?.getHex(), m.emissiveIntensity, m.side, m.flatShading, m.vertexColors, m.envMapIntensity, m.polygonOffset, m.toneMapped].join('|');
+}
+function mergeStatic() {
+  scene.updateMatrixWorld(true);
+  const groups = new Map();
+  const why = {};
+  const no = (r) => { why[r] = (why[r] ?? 0) + 1; };
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.isInstancedMesh || o.isSkinnedMesh) return no('instanced');
+    if (o.children.length) return no('has children');
+    if (!o.visible) return no('hidden');
+    const m = o.material;
+    if (Array.isArray(m) || !m.visible) return no('invisible material');
+    if (m.transparent) return no('transparent');
+    if (!(m.isMeshStandardMaterial || m.isMeshBasicMaterial)) return no('other material');
+    if (o.raycast === NOOP) return no('noPick');
+    // (a BoxGeometry has one group per face; with one material they don't matter, so they are dropped)
+    if (o.renderOrder !== 0 || o.geometry.morphAttributes?.position) return no('order/morph');
+    for (let p = o.parent; p; p = p.parent) if (!p.visible) return no('hidden parent');
+    if (insideMoving(o)) return no('moving/clickable');
+    const attrs = Object.keys(o.geometry.attributes).sort().join(',');
+    const key = `${matKey(m)}#${attrs}#${o.castShadow ? 1 : 0}${o.receiveShadow ? 1 : 0}`;
+    if (!groups.has(key)) groups.set(key, { mat: m, cast: o.castShadow, receive: o.receiveShadow, items: [] });
+    groups.get(key).items.push(o);
+  });
+  let before = 0;
+  let after = 0;
+  for (const { mat, cast, receive, items } of groups.values()) {
+    before += items.length;
+    if (items.length < 2) { after += 1; continue; }
+    const names = Object.keys(items[0].geometry.attributes);
+    let vtx = 0;
+    let idx = 0;
+    for (const o of items) { vtx += o.geometry.attributes.position.count; idx += o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count; }
+    const out = {};
+    for (const n of names) out[n] = new Float32Array(vtx * items[0].geometry.attributes[n].itemSize);
+    const index = new (vtx > 65535 ? Uint32Array : Uint16Array)(idx);
+    let vo = 0;
+    let io = 0;
+    for (const o of items) {
+      const g = o.geometry.clone();
+      g.applyMatrix4(o.matrixWorld); // positions and normals into the room's space (normals flip-safe)
+      for (const n of names) {
+        const a = g.attributes[n];
+        const src = a.isInterleavedBufferAttribute ? Float32Array.from({ length: a.count * a.itemSize }, (_, i) => a.getComponent(Math.floor(i / a.itemSize), i % a.itemSize)) : a.array;
+        out[n].set(src.subarray ? src.subarray(0, a.count * a.itemSize) : src, vo * a.itemSize);
+      }
+      const n = g.attributes.position.count;
+      if (g.index) for (let i = 0; i < g.index.count; i++) index[io++] = g.index.array[i] + vo;
+      else for (let i = 0; i < n; i++) index[io++] = i + vo;
+      vo += n;
+      g.dispose();
+      o.parent.remove(o);
+    }
+    const geo = new THREE.BufferGeometry();
+    for (const n of names) geo.setAttribute(n, new THREE.BufferAttribute(out[n], items[0].geometry.attributes[n].itemSize));
+    geo.setIndex(new THREE.BufferAttribute(index, 1));
+    geo.computeBoundingSphere();
+    const merged = new THREE.Mesh(geo, mat);
+    merged.castShadow = cast;
+    merged.receiveShadow = receive;
+    merged.matrixAutoUpdate = false; // it never moves: skip its matrix every frame
+    merged.name = 'static-merged';
+    scene.add(merged);
+    after += 1;
+  }
+  shadowsDirty = true;
+  return { before, after, skipped: why };
+}
+const mergeInfo = LITE && !params.has('nomerge') ? mergeStatic() : null;
 
 // Resolves when every room picture has arrived (or failed: the room works without them), and reports
 // progress on the way: onProgress(loaded, total).

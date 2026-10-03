@@ -492,3 +492,19 @@
   .room-screen button { min-height: var(--tap, 44px); }
   .room-screen .tape__eject { min-width: var(--tap, 44px); }
 }
+
+/* Phones and tablets (js/room.js LITE): no frosted-glass blur behind the plates and panels. The blur
+   re-renders the 3D room behind every plate each frame, which costs a phone GPU more than the room
+   itself; the plates are made a little more opaque instead. */
+.room-lite .room-panel,
+.room-lite .hint,
+.room-lite .how-panel,
+.room-lite .photo-panel,
+.room-lite .sound-quick,
+.room-lite .room-toggle {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.room-lite .room-panel,
+.room-lite .hint,
+.room-lite .photo-panel { background: rgba(5, 7, 12, 0.94); }

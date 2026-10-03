@@ -20,7 +20,7 @@ Built for the Devpost **Build With AI: Basics** hackathon. The planning document
 4. Press **● REC** to record your own tape. Only the project name, the return date and the first step are required.
 5. The room's sounds (rain, the clock, the season outside, the VCR) start with your first click. **MUSIC OFF** in the top-left corner turns the lo-fi music on; **SOUND** in ROOM CONTROLS mutes everything.
 
-On a phone or tablet the 3D room works by touch, in a lighter mode (lower resolution, smaller shadows) so it stays smooth. Tap the VCR, the curtain, the lamp or the photo. It is most comfortable with the phone turned sideways.
+On a phone or tablet the 3D room works by touch, in a lighter mode so it stays smooth: still furniture is merged into fewer draws, it runs at 30 fps with a resolution that drops when the phone struggles, and it has less dust, rain and shadow detail. Tap the VCR, the curtain, the lamp or the photo. It is most comfortable with the phone turned sideways.
 
 ## What's in it
 

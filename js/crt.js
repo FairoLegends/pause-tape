@@ -94,7 +94,7 @@ const FRAGMENT = /* glsl */ `
   }
 `;
 
-export async function startCrt(screenEl, { getVhs, reducedMotion }) {
+export async function startCrt(screenEl, { getVhs, reducedMotion, active = () => true, maxDpr = 2 }) {
   if (!webglAvailable()) return null; // No WebGL: keep the CSS layer.
   let THREE;
   let renderer;
@@ -131,7 +131,7 @@ export async function startCrt(screenEl, { getVhs, reducedMotion }) {
   // and the shader should keep the same scanline pitch whatever the zoom.
   function resize() {
     const r = { width: screenEl.clientWidth, height: screenEl.clientHeight };
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
     renderer.setPixelRatio(dpr);
     renderer.setSize(Math.max(1, Math.round(r.width)), Math.max(1, Math.round(r.height)), false);
     uniforms.uRes.value.set(Math.round(r.width * dpr), Math.round(r.height * dpr));
@@ -142,7 +142,14 @@ export async function startCrt(screenEl, { getVhs, reducedMotion }) {
   // The --vhs value glides instead of jumping, so a screen change feels like the signal settling.
   let shown = getVhs();
   const start = performance.now();
-  renderer.setAnimationLoop(() => {
+  // active(): false while nobody can see the screen up close (the room camera is out in the room, where
+  // the TV is a few centimetres wide): the layer then holds its last picture instead of redrawing.
+  // Phones: at most 30 redraws a second.
+  let lastDraw = 0;
+  renderer.setAnimationLoop((now) => {
+    if (!active()) return;
+    if (maxDpr < 2 && now - lastDraw < 1000 / 30 - 4) return;
+    lastDraw = now;
     shown += (getVhs() - shown) * 0.08;
     uniforms.uVhs.value = shown;
     uniforms.uMotion.value = reducedMotion() ? 0 : 1;

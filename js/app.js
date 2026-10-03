@@ -222,9 +222,13 @@ restoreFile.addEventListener('change', async () => {
 
 // The shader layer starts once; if WebGL isn't available the CSS layer keeps working.
 
+const touchOnly = window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(pointer: fine)').matches;
 startCrt(document.querySelector('.tv__screen'), {
   getVhs: () => (highContrast() ? 0.1 : VHS[current] ?? 0.5), // high contrast calms the picture
   reducedMotion,
+  // In the room the scanline layer only needs redrawing while the camera is at (or going into) the TV.
+  active: () => !room || room.nearTv(),
+  maxDpr: touchOnly ? 1.5 : 2, // phones: a lighter layer
 });
 
 show('shelf');
