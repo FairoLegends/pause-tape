@@ -100,8 +100,7 @@ The other three criteria are scored on what the video shows, so each scene below
 
 ## Before recording (mechanics)
 
-- **A clean start:** open the live site in a fresh browser profile, or clear the app's `pausetape.` keys (README → reset step). That way the shelf only shows what you record on camera.
-- **The READY tape for scene 5:** record it before filming, with **today** as the return date, a second project (not NO SIGNAL), and a short voice note. Set the sample tape aside first (erase it), or use it as your scene 5 tape.
+- **A clean start:** clear the app's `pausetape.` keys (README → reset step) **before** recording the 4 Oct tape, not after it. Then the shelf shows only that tape and what you record on camera.
 - **Full screen:** press F11 in the browser so no browser logo, tabs or address bar show. Hide the taskbar. Close unrelated windows and notifications (Windows Focus / Do Not Disturb).
 - **Trademarks:** the calendar app in scene 4 shows its own brand. Crop or zoom to the event itself (the date and the title), with no app logo or name in frame.
 - **No personal data in frame:** no email address, your full name, file paths with your user name, or other tabs.
@@ -111,13 +110,15 @@ The other three criteria are scored on what the video shows, so each scene below
 - **Captions:** add English subtitles. Judges often watch without sound, and they help if your accent worries you.
 - **Length check:** export, then watch the whole video once with a timer. It must end before 3:00.
 
-## Decisions (learner, 5 Oct 2026)
+## Decisions (learner, 4 Oct 2026)
 
 - **Narration:** the learner's own voice, with English subtitles.
 - **Face:** not shown; screen only.
-- **Scene 5's READY tape:** NO SIGNAL. Scene 3 records the NO SIGNAL tape for 10 Jan 2027, which stays locked, so scene 5 needs a second, earlier NO SIGNAL tape that is due on the filming day. How to set it up is still open (see below).
+- **Scene 5's READY tape:** NO SIGNAL, recorded **4 Oct 2026** with return date **5 Oct 2026**, the filming day. On camera it reads "MESSAGE FROM 4 OCT 2026 · 1 DAY AGO". Scene 3 then records the second NO SIGNAL tape, for 10 Jan 2027, which stays locked.
+- **Scene 1 draft (learner):** "It feels like a message from my old version." (grammar fix: added "a"). Open: this line describes how the solution feels, so it may fit scene 2 or 5 better than the problem in scene 1.
 
-## Open questions for you
+## Filming-day order (5 Oct 2026)
 
-1. Scene 5 setup: record a NO SIGNAL tape **now**, with the filming day as its return date, so on camera it reads "MESSAGE FROM [today's date] · [N] DAYS AGO"? Or play the locked 10 Jan tape early (PLAY EARLY), which then reads "TODAY"?
-2. Which day will you film? It becomes that tape's return date.
+1. On 4 Oct, in the **same browser and profile** you'll film in, record the scene 5 tape: NO SIGNAL, return date 5 Oct, short answers, a short voice note. Don't clear storage after this: the tape lives only in that browser.
+2. Erase the SAMPLE tape if it's still on the shelf.
+3. On 5 Oct: film scenes 1–2, then scene 3 (the 10 Jan tape) and 4, then scene 5 with the 4 Oct tape, then 6–7.
