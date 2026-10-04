@@ -111,8 +111,13 @@ The other three criteria are scored on what the video shows, so each scene below
 - **Captions:** add English subtitles. Judges often watch without sound, and they help if your accent worries you.
 - **Length check:** export, then watch the whole video once with a timer. It must end before 3:00.
 
+## Decisions (learner, 5 Oct 2026)
+
+- **Narration:** the learner's own voice, with English subtitles.
+- **Face:** not shown; screen only.
+- **Scene 5's READY tape:** NO SIGNAL. Scene 3 records the NO SIGNAL tape for 10 Jan 2027, which stays locked, so scene 5 needs a second, earlier NO SIGNAL tape that is due on the filming day. How to set it up is still open (see below).
+
 ## Open questions for you
 
-1. Narrate in your own voice, or captions only with the app's sound?
-2. Show your face anywhere (for example 3 s at the start), or screen only?
-3. Which second project is the READY tape for scene 5?
+1. Scene 5 setup: record a NO SIGNAL tape **now**, with the filming day as its return date, so on camera it reads "MESSAGE FROM [today's date] · [N] DAYS AGO"? Or play the locked 10 Jan tape early (PLAY EARLY), which then reads "TODAY"?
+2. Which day will you film? It becomes that tape's return date.
