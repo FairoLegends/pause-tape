@@ -1,124 +1,133 @@
 ---
 doc: video-outline
 status: draft
+language: Indonesian guide; every line that goes into the video (narration, subtitles, on-screen text) is in English
 ---
 
-# Demo Video Outline
+# Kerangka Video Demo
 
-A frame for the demo video. The scenes, timings and shot notes are a plan; **the narration is yours**. Every `[bracket]` is a gap for your own words. The guiding question under each one says what that part needs to answer. Write it in English (the rules require English materials, or an English translation).
+Kerangka untuk video demo. Adegan, durasi, dan catatan pengambilan gambar adalah rencana; **narasinya kamu yang tulis**. Setiap `[kurung siku]` adalah tempat untuk kata-katamu sendiri, dan pertanyaan panduan di bawahnya menjelaskan apa yang perlu dijawab bagian itu.
 
-## What the rules ask of the video
+**Aturan bahasa:** panduan di file ini berbahasa Indonesia. Semua yang **masuk ke video** (narasi, subtitle, teks di layar) **wajib bahasa Inggris**, karena rules meminta materi submission dalam bahasa Inggris (atau terjemahan bahasa Inggrisnya). Bagian seperti itu ditandai **🎬 EN**.
 
-From the official rules (sections 4 and 6):
+## Yang diminta rules untuk video
 
-- **Under 3 minutes.** Judges don't have to watch past 3:00. Aim for **2:30** to leave a margin.
-- **Shows the project working on the device it was built for:** a laptop browser. A short phone clip is a bonus, not a requirement.
-- **Public on YouTube or Vimeo**, with the link on the submission form.
-- **No third-party trademarks, and no copyrighted music** unless you have permission. The app's own sounds are generated in code, so they're safe to keep.
-- **Presentation is judged on:** whether the video shows the project working end to end, whether the pitch says what problem it solves, who it's for and why it matters, and whether it's easy to follow.
+Dari rules resmi (bagian 4 dan 6):
 
-The other three criteria are scored on what the video shows, so each scene below names the criterion it serves:
+- **Di bawah 3 menit.** Juri tidak wajib menonton lewat dari 3:00. Target **2:30** supaya ada sisa waktu.
+- **Menunjukkan project berjalan di perangkat tujuannya:** browser laptop. Potongan singkat di HP hanya bonus, bukan syarat.
+- **Publik di YouTube atau Vimeo**, dan linknya dimasukkan di form submission.
+- **Tanpa merek pihak ketiga dan tanpa musik berhak cipta**, kecuali ada izin. Suara app dibuat dari kode, jadi aman dipakai.
+- **Presentation dinilai dari:** video menunjukkan project berjalan dari awal sampai akhir; pitch menjelaskan masalah apa yang diselesaikan, untuk siapa, dan kenapa penting; serta mudah diikuti.
 
-| Criterion | What the judges ask |
+Tiga kriteria lain juga dinilai dari apa yang terlihat di video, jadi setiap adegan di bawah menyebut kriteria yang dilayaninya:
+
+| Kriteria | Pertanyaan juri |
 |---|---|
-| Design | A complete, coherent product experience, not just a technical proof of concept? |
-| Potential Impact | A credible, specific case for a real problem and a real audience, and does the demo show it solved? |
-| Innovation/Idea | How creative and novel is it, and how is it different from existing tools? |
-| Presentation | Working end to end; problem, audience and why it matters; easy to follow. |
+| Design | Apakah ini pengalaman produk yang lengkap dan utuh, bukan sekadar proof of concept teknis? |
+| Potential Impact | Apakah ada alasan yang meyakinkan dan spesifik untuk masalah nyata dan pengguna nyata, dan apakah demo menunjukkan masalah itu terselesaikan? |
+| Innovation/Idea | Seberapa kreatif dan baru idenya, dan apa bedanya dengan yang sudah ada? |
+| Presentation | Berjalan dari awal sampai akhir; masalah, pengguna, dan kenapa penting; mudah diikuti. |
 
-## Scenes (target 2:30)
+## Adegan (target 2:30)
 
-| # | Time | Scene | Serves |
+| # | Waktu | Adegan | Melayani |
 |---|---|---|---|
-| 1 | 0:00–0:15 | The problem | Impact, Presentation |
-| 2 | 0:15–0:30 | The idea | Innovation |
-| 3 | 0:30–1:15 | Pause: record a tape | End to end, Design |
-| 4 | 1:15–1:30 | The reminder lands in the calendar | End to end |
-| 5 | 1:30–2:10 | Come back: play the tape | End to end, the "oh, that's cool" beat |
-| 6 | 2:10–2:25 | The room, and it's real | Design, Impact |
-| 7 | 2:25–2:30 | Close | Presentation |
+| 1 | 0:00–0:15 | Masalahnya | Impact, Presentation |
+| 2 | 0:15–0:30 | Idenya | Innovation |
+| 3 | 0:30–1:15 | Pause: merekam tape | Awal sampai akhir, Design |
+| 4 | 1:15–1:30 | Pengingat masuk kalender | Awal sampai akhir |
+| 5 | 1:30–2:10 | Kembali: memutar tape | Awal sampai akhir, momen "oh, that's cool" |
+| 6 | 2:10–2:25 | Ruangannya, dan ini nyata | Design, Impact |
+| 7 | 2:25–2:30 | Penutup | Presentation |
 
-### 1. The problem (0:00–0:15)
+### 1. Masalahnya (0:00–0:15)
 
-**On screen:** the 3D room at night (`?time=malam`), still, with rain on. Or your own shot of your desk or of NO SIGNAL (only your own footage, no logos).
+**Di layar:** ruangan 3D malam hari (`?time=malam`), diam, hujan menyala. Atau rekamanmu sendiri tentang meja kerjamu atau NO SIGNAL (hanya rekaman milikmu, tanpa logo).
 
-**Narration:** [your words]
-> Guiding question: what happens to you when you come back to a side project after weeks away? Say it as your own experience, in one or two sentences.
+**🎬 EN Narasi:** [kalimatmu, bahasa Inggris]
+> Pertanyaan panduan: apa yang terjadi padamu saat kembali ke side project setelah berminggu-minggu ditinggal? Ceritakan sebagai pengalamanmu sendiri, satu atau dua kalimat.
 
-### 2. The idea (0:15–0:30)
+Draf darimu: *"It feels like a message from my old version."* Kalimat ini menggambarkan rasa solusinya, bukan masalahnya, jadi mungkin lebih cocok di adegan 5 (lihat bagian Keputusan).
 
-**On screen:** the camera moves from the room into the TV (click the VCR). The shelf appears.
+### 2. Idenya (0:15–0:30)
 
-**Narration:** [your words]
-> Guiding question: what is Pause Tape in one sentence, and what makes it different from a to-do list or a notes app? (Your scope's kernel: a message from your past self, played on a CRT, that ends with one 10-minute first step.)
+**Di layar:** kamera bergerak dari ruangan masuk ke TV (klik VCR). Rak kaset muncul.
 
-### 3. Pause: record a tape (0:30–1:15)
+**🎬 EN Narasi:** [kalimatmu, bahasa Inggris]
+> Pertanyaan panduan: apa itu Pause Tape dalam satu kalimat, dan apa bedanya dengan to-do list atau aplikasi catatan? (Inti dari scope-mu: pesan dari dirimu di masa lalu, diputar di TV tabung, dan diakhiri satu langkah pertama 10 menit.)
 
-**On screen**, in this order:
-1. Press **● REC**. The camcorder viewfinder appears with the running timer.
-2. Type the project name **NO SIGNAL** and the return date **10 Jan 2027**.
-3. Fill in the four answers. Speed this part up 2–4× in the edit so it lasts about 15 s.
-4. Optional, 5 s: **RECORD VOICE** with a short line, so the level meter shows.
-5. Press **■ STOP**. **TAPE SAVED** appears.
+### 3. Pause: merekam tape (0:30–1:15)
 
-**Narration:** [your words]
-> Guiding question: why these four questions? Which one would have saved you the most time coming back?
+**Di layar**, berurutan:
+1. Tekan **● REC**. Tampilan viewfinder camcorder muncul dengan timer berjalan.
+2. Ketik nama project **NO SIGNAL** dan return date **10 Jan 2027**.
+3. Isi empat jawaban. Percepat bagian ini 2–4× saat editing supaya hanya sekitar 15 detik.
+4. Opsional, 5 detik: **RECORD VOICE** dengan satu kalimat pendek, supaya meter suaranya terlihat.
+5. Tekan **■ STOP**. **TAPE SAVED** muncul.
 
-**Your four answers for NO SIGNAL:** [your real answers. These are shown on screen, so write them now and keep them short.]
+**🎬 EN Narasi:** [kalimatmu, bahasa Inggris]
+> Pertanyaan panduan: kenapa empat pertanyaan ini? Mana yang paling menghemat waktumu saat kembali nanti?
 
-### 4. The reminder lands in the calendar (1:15–1:30)
+**🎬 EN Empat jawaban untuk tape NO SIGNAL (10 Jan 2027):** [jawaban aslimu, bahasa Inggris. Jawaban ini tampil di layar, jadi tulis sekarang dan buat singkat.]
+- WHERE I STOPPED: [...]
+- FIRST STEP: [...]
+- UNSURE: [...]
+- WHY: [...]
 
-**On screen:** press **Add to calendar (.ics)**, open the downloaded file, and show the all-day event on 10 Jan 2027. Back on the shelf, the NO SIGNAL tape is **locked with a countdown**.
+### 4. Pengingat masuk kalender (1:15–1:30)
 
-**Narration:** [your words]
-> Guiding question: what brings you back on the right day?
+**Di layar:** tekan **Add to calendar (.ics)**, buka file yang terunduh, lalu tunjukkan acara seharian di 10 Jan 2027. Kembali ke rak, tape NO SIGNAL **terkunci dengan hitung mundur**.
 
-### 5. Come back: play the tape (1:30–2:10)
+**🎬 EN Narasi:** [kalimatmu, bahasa Inggris]
+> Pertanyaan panduan: apa yang membuatmu kembali tepat di hari yang ditentukan?
 
-**On screen:** a tape that is **READY today**: one you record for a second project with today's date before you start filming (see "Before recording"). Click it.
-1. The cassette goes into the VCR, then the blue loading screen and the intro line **MESSAGE FROM [date] · [N] DAYS AGO**.
-2. The answers appear one by one with the VHS glitch, and the voice note plays.
-3. **FIRST STEP** appears last and the 10-minute timer starts.
-4. Press **I'M BACK ON IT**: **BACK ON IT · [N] MIN**.
-5. Back on the shelf the tape shows its minutes, and the cassette ejects.
+### 5. Kembali: memutar tape (1:30–2:10)
 
-**Narration:** [your words]
-> Guiding question: what do you feel when your own words come back on the screen? This is the "oh, that's cool" moment from your scope. Give it a second of silence before you speak.
+**Di layar:** tape **NO SIGNAL yang direkam 4 Okt** dengan return date 5 Okt, jadi tape ini **READY** di hari syuting. Klik tape itu.
+1. Kaset masuk ke VCR, lalu layar biru loading dan baris pembuka **MESSAGE FROM 4 OCT 2026 · 1 DAY AGO**.
+2. Jawaban muncul satu per satu dengan glitch VHS, dan voice note diputar.
+3. **FIRST STEP** muncul terakhir, dan timer 10 menit mulai.
+4. Tekan **I'M BACK ON IT**: muncul **BACK ON IT · [N] MIN**.
+5. Kembali ke rak, tape menampilkan jumlah menitnya, dan kaset keluar.
 
-### 6. The room, and it's real (2:10–2:25)
+**🎬 EN Narasi:** [kalimatmu, bahasa Inggris]
+> Pertanyaan panduan: apa yang kamu rasakan saat kata-katamu sendiri muncul lagi di layar? Ini momen "oh, that's cool" dari scope-mu. Beri jeda diam satu detik sebelum mulai bicara.
 
-**On screen:** **BACK TO THE ROOM**. A quick 5–8 s montage: open the curtain, switch the lamp, change SEASON (snow → spring), rain on. Optional 3 s: the room on your phone.
+### 6. Ruangannya, dan ini nyata (2:10–2:25)
 
-**Narration:** [your words]
-> Guiding question: who else is it for, and what will you actually use it for on 10 January 2027?
+**Di layar:** **BACK TO THE ROOM**. Montase cepat 5–8 detik: buka gorden, nyalakan lampu, ganti SEASON (snow → spring), hujan menyala. Opsional 3 detik: ruangan di HP-mu.
 
-### 7. Close (2:25–2:30)
+**🎬 EN Narasi:** [kalimatmu, bahasa Inggris]
+> Pertanyaan panduan: untuk siapa lagi app ini, dan untuk apa kamu benar-benar akan memakainya pada 10 Januari 2027?
 
-**On screen:** the app's title, plus the live link `fairolegends.github.io/pause-tape` and the repo URL as text.
+### 7. Penutup (2:25–2:30)
 
-**Narration:** [your words, one line]
+**🎬 EN Di layar (teks):** judul app, link situs `fairolegends.github.io/pause-tape`, dan URL repo.
 
-## Before recording (mechanics)
+**🎬 EN Narasi:** [satu kalimatmu, bahasa Inggris]
 
-- **A clean start:** clear the app's `pausetape.` keys (README → reset step) **before** recording the 4 Oct tape, not after it. Then the shelf shows only that tape and what you record on camera.
-- **Full screen:** press F11 in the browser so no browser logo, tabs or address bar show. Hide the taskbar. Close unrelated windows and notifications (Windows Focus / Do Not Disturb).
-- **Trademarks:** the calendar app in scene 4 shows its own brand. Crop or zoom to the event itself (the date and the title), with no app logo or name in frame.
-- **No personal data in frame:** no email address, your full name, file paths with your user name, or other tabs.
-- **Sound:** keep the app's own sound (it's generated in code). Turn MUSIC on only if you want it under the narration, and keep it low. Don't add outside music unless it's licensed for this.
-- **Screen recorder:** OBS Studio (free) or the Windows Snipping Tool's screen recording. Record at 1920×1080.
-- **Narration:** record your voice separately after the screen recording, then line it up in the edit. That's easier than talking while clicking.
-- **Captions:** add English subtitles. Judges often watch without sound, and they help if your accent worries you.
-- **Length check:** export, then watch the whole video once with a timer. It must end before 3:00.
+## Sebelum merekam (teknis)
 
-## Decisions (learner, 4 Oct 2026)
+- **Mulai bersih:** hapus key `pausetape.` milik app (README → langkah reset) **sebelum** merekam tape 4 Okt, jangan sesudahnya. Dengan begitu rak hanya berisi tape itu dan apa yang kamu rekam di depan kamera.
+- **Layar penuh:** tekan F11 di browser supaya logo browser, tab, dan address bar tidak terlihat. Sembunyikan taskbar. Tutup jendela lain dan notifikasi (Windows Focus / Jangan Ganggu).
+- **Merek:** aplikasi kalender di adegan 4 menampilkan mereknya sendiri. Crop atau zoom ke acaranya saja (tanggal dan judul), tanpa logo atau nama aplikasi di frame.
+- **Tanpa data pribadi di frame:** alamat email, nama lengkap, path file berisi nama user, atau tab lain tidak boleh terlihat.
+- **Suara:** pakai suara app sendiri (dibuat dari kode). Nyalakan MUSIC hanya kalau ingin ada musik di bawah narasi, dan pelankan. Jangan tambah musik dari luar kecuali lisensinya mengizinkan.
+- **Perekam layar:** OBS Studio (gratis) atau fitur rekam layar di Windows Snipping Tool. Rekam di 1920×1080.
+- **Narasi:** rekam suaramu terpisah setelah rekaman layar, lalu sinkronkan saat editing. Lebih mudah daripada bicara sambil mengklik.
+- **🎬 EN Subtitle:** subtitle bahasa Inggris, isinya sama dengan narasi. Juri sering menonton tanpa suara, dan subtitle membantu kalau kamu khawatir soal aksen.
+- **Cek durasi:** export, lalu tonton seluruh video sekali sambil memakai timer. Video harus selesai sebelum 3:00.
 
-- **Narration:** the learner's own voice, with English subtitles.
-- **Face:** not shown; screen only.
-- **Scene 5's READY tape:** NO SIGNAL, recorded **4 Oct 2026** with return date **5 Oct 2026**, the filming day. On camera it reads "MESSAGE FROM 4 OCT 2026 · 1 DAY AGO". Scene 3 then records the second NO SIGNAL tape, for 10 Jan 2027, which stays locked.
-- **Scene 1 draft (learner):** "It feels like a message from my old version." (grammar fix: added "a"). Open: this line describes how the solution feels, so it may fit scene 2 or 5 better than the problem in scene 1.
+## Keputusan (dari kamu, 4 Okt 2026)
 
-## Filming-day order (5 Oct 2026)
+- **Narasi:** suaramu sendiri, dengan subtitle bahasa Inggris.
+- **Wajah:** tidak tampil; hanya layar.
+- **Tape READY untuk adegan 5:** NO SIGNAL, direkam **4 Okt 2026** dengan return date **5 Okt 2026** (hari syuting). Di kamera tertulis "MESSAGE FROM 4 OCT 2026 · 1 DAY AGO". Adegan 3 kemudian merekam tape NO SIGNAL kedua untuk 10 Jan 2027, yang tetap terkunci.
+- **Draf adegan 1 (darimu):** *"It feels like a message from my old version."* (perbaikan grammar: ditambah "a"). Masih terbuka: kalimat ini menggambarkan rasa solusinya, jadi mungkin lebih cocok di adegan 2 atau 5 daripada untuk masalah di adegan 1.
 
-1. On 4 Oct, in the **same browser and profile** you'll film in, record the scene 5 tape: NO SIGNAL, return date 5 Oct, short answers, a short voice note. Don't clear storage after this: the tape lives only in that browser.
-2. Erase the SAMPLE tape if it's still on the shelf.
-3. On 5 Oct: film scenes 1–2, then scene 3 (the 10 Jan tape) and 4, then scene 5 with the 4 Oct tape, then 6–7.
+## Urutan hari syuting (5 Okt 2026)
+
+1. Tanggal 4 Okt, di **browser dan profil yang sama** dengan yang akan dipakai syuting, rekam tape untuk adegan 5: NO SIGNAL, return date 5 Okt, jawaban singkat, voice note pendek. **🎬 EN** Jawaban dan voice note-nya dalam bahasa Inggris, karena keduanya akan tampil dan terdengar di video. Setelah itu jangan hapus penyimpanan browser, karena tape hanya tersimpan di browser itu.
+2. Hapus kaset SAMPLE kalau masih ada di rak.
+3. Tanggal 5 Okt: rekam adegan 1–2, lalu adegan 3 (tape 10 Jan) dan 4, lalu adegan 5 dengan tape 4 Okt, lalu adegan 6–7.
