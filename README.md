@@ -30,7 +30,7 @@ On a phone or tablet the 3D room works by touch, in a lighter mode so it stays s
 - **Playback:** blue VCR loading screen, the "MESSAGE FROM …" intro, your voice note, answers revealed one by one with a tape glitch ("NO SIGNAL" for empty ones), ▶▶ to skip, then the first step and the 10-minute timer.
 - **PAUSE AGAIN:** from the BACK ON IT screen, record the next tape for the same project.
 - **Erase, backup, restore:** ⏏ on a tape erases it (after a confirmation). BACKUP downloads your tapes as a `.json` file, and RESTORE adds them back from one.
-- **The room** (laptops and desktops): a 3D living room around the TV. The light follows the time of day, and the window view changes with the season (snow, spring, summer, dry season). You can open and close the curtain, pull the lamp's cord, put your own photo in the frame, and watch the cassette go in and come out of the VCR. **ROOM CONTROLS** (top right) lets you change the time of day and the season, turn rain on, and switch on REDUCE MOTION or HIGH CONTRAST. **HOW IT WORKS** lists the AI model and the prompts behind the pictures.
+- **The room** (laptops and desktops): a 3D living room around the TV. The light follows the time of day, the window view changes with the season (snow, spring, summer, dry season), and the books on the shelf are arranged anew at every visit. You can open and close the curtain, pull the lamp's cord, put your own photo in the frame, and watch the cassette go in and come out of the VCR. **ROOM CONTROLS** (top right) lets you change the time of day and the season, turn rain on, and switch on REDUCE MOTION or HIGH CONTRAST. **HOW IT WORKS** lists the AI model and the prompts behind the pictures.
 - **Sound** (off until you turn it on): rain, a ticking clock, quiet lo-fi, season ambience, and VCR, tape and TV effects. Everything is made in code with the Web Audio API.
 
 ## Where your data lives
@@ -60,6 +60,7 @@ Useful addresses for testing and demos:
 | `http://localhost:8000/?time=pagi` (or `siang`, `sore`, `malam`, or `morning` / `day` / `afternoon` / `night`) | Fixes the time of day in the room |
 | `http://localhost:8000/?season=snow` (or `spring`, `summer`, `dry`) | Fixes the season outside the window |
 | `http://localhost:8000/?flat` | The flat TV without the 3D room |
+| `http://localhost:8000/?books=18` (any number or word) | Fixes the arrangement of the books on the shelf. Without it, every visit gets a new one |
 
 **Reset for a demo from an empty shelf:** open DevTools (F12) → Application → Local Storage → `http://localhost:8000`, and delete the keys that start with `pausetape.`. The sample tape comes back once the shelf is empty again.
 
@@ -89,6 +90,7 @@ Plain HTML, CSS and JavaScript modules: no framework, no build step, no backend.
 - `js/prefs.js`: accessibility switches.
 - `js/crt.js`: the VHS shader layer.
 - `js/room.js`: the three.js room, where the real app screen sits on the 3D TV's glass with `CSS3DRenderer`.
+- `js/books.js`: places the books on the bookshelf, a new arrangement at every visit (a leaning book always rests on a neighbour).
 - Libraries are vendored in `assets/vendor/`: three.js r186 and GSAP 3.15 (text scramble and timing).
 
 ## Credits

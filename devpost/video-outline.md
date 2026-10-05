@@ -110,6 +110,7 @@ Draf darimu: *"It feels like a message from my old version."* Kalimat ini mengga
 ## Sebelum merekam (teknis)
 
 - **Mulai bersih:** hapus key `pausetape.` milik app (README → langkah reset) **sebelum** merekam tape 4 Okt, jangan sesudahnya. Dengan begitu rak hanya berisi tape itu dan apa yang kamu rekam di depan kamera.
+- **Rak buku yang sama di setiap take:** rak buku di ruangan kini disusun ulang setiap halaman dibuka, termasuk saat reload. Buka situs dengan `https://fairolegends.github.io/pause-tape/?books=[angka pilihanmu]` untuk semua take, supaya susunan buku tidak berubah antar potongan adegan 1, 2, dan 6. Pilih satu angka, lalu catat di bagian Keputusan.
 - **Layar penuh:** tekan F11 di browser supaya logo browser, tab, dan address bar tidak terlihat. Sembunyikan taskbar. Tutup jendela lain dan notifikasi (Windows Focus / Jangan Ganggu).
 - **Merek:** aplikasi kalender di adegan 4 menampilkan mereknya sendiri. Crop atau zoom ke acaranya saja (tanggal dan judul), tanpa logo atau nama aplikasi di frame.
 - **Tanpa data pribadi di frame:** alamat email, nama lengkap, path file berisi nama user, atau tab lain tidak boleh terlihat.

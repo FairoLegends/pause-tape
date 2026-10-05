@@ -19,6 +19,7 @@ import { visibleTapes } from './store.js';
 import { setSeasonSound, setRain, rainOn } from './sound.js';
 import { tapeOut } from './sound.js';
 import { setSound, vcrClick, tapeIn, staticBurst, soundState, lampSwitch, curtainSlide } from './sound.js';
+import { makeBooks, shelfSpec, seedFromParam, randomSeed } from './books.js';
 
 const stage = document.querySelector('[data-room-stage]');
 const roomUi = document.querySelector('[data-room-ui]');
@@ -980,48 +981,14 @@ function makeBookshelf() {
   const boards = [0.02, 0.42, 0.82, 1.22, 1.6, H - 0.015];
   for (const y of boards) box(W, 0.03, D, wood, 0, y, 0, g);
 
-  const rand = rng(7);
+  // The books come from js/books.js: a new arrangement every time the page opens (learner request, 5 Oct
+  // 2026), or a fixed one with ?books=<number or any word> for filming and for the checks. A leaning book
+  // always rests on a standing neighbour that has another book behind it (the generator proves it on every
+  // row and rebuilds a row that breaks a rule). The first version let a leaner tip onto empty air.
   const palette = [0xb9483c, 0xd18b3a, 0x3f7f86, 0x2f4f7a, 0xe3d6b4, 0x6a8f4e, 0x8d4a6a, 0xc9a24a];
-  const items = [];
-  for (let s = 0; s < boards.length - 1; s++) {
-    const floorY = boards[s] + 0.015;
-    const maxH = boards[s + 1] - 0.015 - floorY - 0.02;
-    const fill = s === 2 ? 0.55 : 0.92; // one shelf is half empty, like a real one
-    const xEnd = W / 2 - T - 0.015;
-    let x = -W / 2 + T + 0.015;
-    // Books stand side by side with a small gap and never pass into each other (learner markup, 4 Oct
-    // 2026: overlapping boxes flickered where their faces met). A leaning book only appears right after a
-    // gap, tips toward the book before it, and rests its top on that book: it is rotated about its
-    // bottom corner, and the next book starts after its full tilted footprint.
-    let afterGap = false;
-    let prevH = 0;
-    while (x < xEnd - 0.03) {
-      const w = 0.028 + rand() * 0.03;
-      if (x + w > xEnd) break;
-      if (rand() > fill) { x += 0.05 + rand() * 0.06; afterGap = true; continue; } // a gap
-      const h = Math.min(maxH, 0.2 + rand() * 0.14);
-      const d = 0.15 + rand() * 0.05;
-      const c = palette[Math.floor(rand() * palette.length)];
-      const wantLean = rand() > 0.6; // most books after a gap lean on their neighbour
-      if (wantLean && afterGap && prevH > 0) {
-        // Tilt to the left (toward the previous book, which ends at x - 0.04 or so): rotate about the
-        // bottom-left corner by an angle that keeps the top-left corner just clear of that book.
-        const ang = 0.2;
-        const footprint = w * Math.cos(ang) + h * Math.sin(ang);
-        const x0 = x + h * Math.sin(ang); // bottom-left corner, so the top-left leans back to x
-        const cx = x0 + (w / 2) * Math.cos(ang) - (h / 2) * Math.sin(ang);
-        const cy = floorY + (w / 2) * Math.sin(ang) + (h / 2) * Math.cos(ang);
-        if (x + footprint + 0.004 > xEnd) break;
-        items.push({ x: cx, y: cy, z: D / 2 - 0.03 - d / 2, w, h, d, lean: ang, c });
-        x += footprint + 0.004;
-      } else {
-        items.push({ x: x + w / 2, y: floorY + h / 2, z: D / 2 - 0.03 - d / 2, w, h, d, lean: 0, c });
-        x += w + 0.004;
-      }
-      afterGap = false;
-      prevH = h;
-    }
-  }
+  const seed = seedFromParam(params.get('books')) ?? randomSeed();
+  const stats = { retries: 0, fallbacks: 0 };
+  const items = makeBooks(seed, shelfSpec({ width: W, side: T, boards, front: D / 2 - 0.03 }), palette.length, stats);
   const books = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), std(0xffffff, 0.75), items.length);
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -1030,11 +997,13 @@ function makeBookshelf() {
   items.forEach((b, i) => {
     m4.compose(V(b.x, b.y, b.z), q.setFromEuler(e.set(0, 0, b.lean)), V(b.w, b.h, b.d));
     books.setMatrixAt(i, m4);
-    books.setColorAt(i, col.set(b.c));
+    books.setColorAt(i, col.set(palette[b.color]));
   });
   books.instanceMatrix.needsUpdate = true;
   books.instanceColor.needsUpdate = true;
-  g.userData.books = items; // for the checks: no two books may overlap
+  g.userData.books = items; // for the checks: where every book is and what it leans on
+  g.userData.seed = seed;
+  g.userData.bookStats = stats;
   books.castShadow = true;
   books.receiveShadow = true;
   g.add(books);
@@ -2627,7 +2596,9 @@ for (const sx of [-1, 1]) {
 // For the automated checks (the room is a module, so they need a handle on it).
 window.__room = {
   rain: () => ({ on: rainOn(), shown: rainShown, lines: rainLines.visible, drops: drops.visible, amount: dropsMat.uniforms.uAmount.value, alpha: rainMat.uniforms.uAlpha.value, speed: rainMat.uniforms.uSpeed.value }),
-  books: () => bookshelf.userData.books.map(({ x, y, w, h, lean }) => ({ x, y, w, h, lean })),
+  books: () => bookshelf.userData.books.map(({ x, y, w, h, lean, row, kind, on, color }) => ({ x, y, w, h, lean, row, kind, on, color })),
+  bookSeed: () => bookshelf.userData.seed,
+  bookStats: () => ({ ...bookshelf.userData.bookStats }),
   layout: () => {
     const bx = (o) => new THREE.Box3().setFromObject(o);
     const c = bx(clockGroup); const l = { min: { x: SIDE.x - SIDE.w / 2 }, max: { x: SIDE.x + SIDE.w / 2 } }; // the table itself (the lamp's light and glow make its box huge)
