@@ -20,6 +20,8 @@ import { setSeasonSound, setRain, rainOn } from './sound.js';
 import { tapeOut } from './sound.js';
 import { setSound, vcrClick, tapeIn, staticBurst, soundState, lampSwitch, curtainSlide } from './sound.js';
 import { makeBooks, shelfSpec, seedFromParam, randomSeed } from './books.js';
+import { makeCat } from './cat.js';
+import * as snd from './sound.js'; // newer calls (setScene, setWind) are used only when the sound module has them
 
 const stage = document.querySelector('[data-room-stage]');
 const roomUi = document.querySelector('[data-room-ui]');
@@ -391,19 +393,51 @@ const VIEW_W = 2.7;
 viewMat.uniforms.uHeat = { value: 0 };
 viewMat.uniforms.uGain = { value: 1 }; // per-season exposure, so bright snow and spring don't wash out
 viewMat.uniforms.uTime = { value: 0 };
+// Wind (learner request, 5 Oct 2026: a breeze by day that the trees feel too). A small mask picture per season
+// (room/sway-<season>.webp) says which pixels are a tree crown (R), a palm frond (G) or a low plant (B), with a
+// weight that grows toward the top of the crown. The shader slides those pixels sideways by that weight: the
+// crown leans with each gust and sways lazily, the base stays put. The night picture was made from the day
+// one, so both share the mask. Like a foliage wind shader in Unity, but for a flat painted picture. uWind is 0
+// at night (and with reduced motion), which leaves the painting exactly as it was drawn.
+const blackMask = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); // until a season's mask arrives
+blackMask.needsUpdate = true;
+viewMat.uniforms.uWind = { value: 0 };
+viewMat.uniforms.sway = { value: blackMask };
 viewMat.fragmentShader = viewMat.fragmentShader
-  .replace('uniform vec3 tint; varying vec2 vUv;', 'uniform vec3 tint; uniform float uHeat, uTime, uGain; varying vec2 vUv;')
+  .replace('uniform vec3 tint; varying vec2 vUv;', `uniform vec3 tint; uniform float uHeat, uTime, uGain, uWind; uniform sampler2D sway; varying vec2 vUv;
+    float swayShift(vec2 p) {
+      vec3 m = texture2D(sway, p).rgb;
+      float wave = 0.65 * sin(p.x * 6.0 + p.y * 2.0 - uTime * 1.1) + 0.35 * sin(p.x * 13.0 - p.y * 3.0 - uTime * 1.9); // -1..1: a slow roll with a quicker ripple
+      float lean = 0.62 + 0.38 * wave;                                 // the crown mostly leans with the wind and rocks around that
+      float flutter = sin(p.x * 31.0 + p.y * 11.0 - uTime * 6.5);      // fronds and small leaves tremble faster
+      float crown = m.r * lean;
+      float palm = m.g * (lean + 0.12 * flutter);
+      float low = m.b * (lean + 0.1 * flutter);
+      return uWind * 0.020 * (crown + 1.3 * palm + 0.6 * low);         // picture widths: at most about 2.9 % (a palm top in a full gust)
+    }`)
   .replace('vec3 a = texture2D(day, vUv).rgb * tint;', `float hz = uHeat * smoothstep(0.42, 0.18, vUv.y) * 0.0025;
-      vec2 uv = vUv + vec2(sin(vUv.y * 160.0 + uTime * 3.0) * hz, 0.0);
+      vec2 uv = vUv + vec2(sin(vUv.y * 160.0 + uTime * 3.0) * hz - swayShift(vUv), 0.0);
       vec3 a = pow(texture2D(day, uv).rgb, vec3(1.0 + (1.0 - uGain) * 1.4)) * tint * uGain;`)
   .replace('vec3 b = texture2D(night, vUv).rgb;', 'vec3 b = texture2D(night, uv).rgb;');
 const view = noPick(new THREE.Mesh(new THREE.PlaneGeometry(VIEW_W, VIEW_W * 0.75), viewMat));
+// Where the pane of glass sits inside the outside picture (uv: x offset, y offset, width, height), seen from the
+// home camera. The water drops on the glass read it back to show a tiny upside-down copy of the view.
+const paneMap = new THREE.Vector4(0.208, 0.207, 0.584, 0.616);
 function placeView(aspect) { // centre the picture on the window's line of sight from the home camera
   const home = POSES.desktop.pos;
   const planeZ = WALL_Z - 1.4;
   const kk = (planeZ - home.z) / (WALL_Z - home.z);
   view.scale.set(1, 1 / aspect / 0.75, 1);
   view.position.set(home.x + (fx - home.x) * kk, home.y + (fy - home.y) * kk - 0.03, planeZ);
+  const kg = (planeZ - home.z) / (WALL_Z + 0.035 - home.z); // the glass plane, projected onto the picture
+  const onPic = (x, y) => [home.x + (x - home.x) * kg, home.y + (y - home.y) * kg];
+  const [x0, y0] = onPic(fx - WIN.w / 2, fy - WIN.h / 2);
+  const [x1, y1] = onPic(fx + WIN.w / 2, fy + WIN.h / 2);
+  const pw = VIEW_W * view.scale.x;
+  const ph = VIEW_W * 0.75 * view.scale.y;
+  const u0 = 0.5 + (x0 - view.position.x) / pw;
+  const v0 = 0.5 + (y0 - view.position.y) / ph;
+  paneMap.set(u0, v0, 0.5 + (x1 - view.position.x) / pw - u0, 0.5 + (y1 - view.position.y) / ph - v0);
 }
 placeView(4 / 3);
 scene.add(view);
@@ -443,6 +477,7 @@ function loadSeason(name) {
     if (seasonName() !== name || !seasonTex[name]?.day || !seasonTex[name]?.night) return;
     viewMat.uniforms.day.value = seasonTex[name].day;
     viewMat.uniforms.night.value = seasonTex[name].night;
+    viewMat.uniforms.sway.value = seasonTex[name].sway ?? blackMask; // a season without its mask simply has no wind
     placeView(seasonTex[name].day.image.width / seasonTex[name].day.image.height);
     shownSeason = name;
   };
@@ -455,6 +490,10 @@ function loadSeason(name) {
       apply();
     }, undefined, () => {});
   }
+  loader.load(asset(`room/sway-${name}.webp`), (t) => { // data, not colour: left in the default (linear) colour space
+    seasonTex[name].sway = t;
+    apply();
+  }, undefined, () => {});
 }
 loadSeason(seasonName());
 
@@ -494,7 +533,7 @@ function curtainPanel(side) { // side -1 = left panel (anchored at the rod's lef
 const curtainL = curtainPanel(-1);
 const curtainR = curtainPanel(1);
 const cloth = { lag: 0, lagVel: 0, prevW: PANEL_OPEN, vel: 0 };
-function shapeCurtain(m, pw, t, still, hoverAmt) {
+function shapeCurtain(m, pw, t, still, hoverAmt, wind = 0) {
   const side = m.userData.side;
   const pos = m.geometry.attributes.position;
   const H = CURTAIN_TOP - CURTAIN_BOTTOM;
@@ -508,7 +547,9 @@ function shapeCurtain(m, pw, t, still, hoverAmt) {
       const x = u * pw + cloth.lag * u * v * v; // the lower, freer part trails behind
       const fold = Math.sin(u * Math.PI * 2 * 7) * (0.8 + 0.2 * Math.sin(u * 23 + side));
       const flare = 1 + 0.35 * v * v; // the folds open up toward the hem
-      const breathe = still ? 0 : (0.006 + 0.008 * hoverAmt) * v * Math.sin(t * 1.3 + u * 6 + v * 2 + side * 2);
+      // The cloth breathes a little; a breeze through the open window (learner request, 5 Oct 2026) swells it,
+      // mostly toward the hem, and lifts it in slow waves.
+      const breathe = still ? 0 : (0.006 + 0.008 * hoverAmt + 0.016 * wind) * v * Math.sin(t * (1.3 + 0.9 * wind) + u * 6 + v * 2 + side * 2);
       pos.setXYZ(i, side < 0 ? x : -x, H / 2 - v * H, amp * fold * flare * (1 - 0.1 * v) + breathe);
     }
   }
@@ -528,7 +569,7 @@ for (const ex of [ROD.x0 - 0.06, ROD.x1 + 0.06]) {
 let curtainTarget = 1; // 1 = open, 0 = closed
 let curtainAmount = 1; // what is on screen (eased)
 let curtainOpen = 1; // the same, smoothed again for the look
-const toggleCurtain = () => { curtainTarget = curtainTarget > 0.5 ? 0 : 1; curtainSlide(curtainTarget === 1); };
+const toggleCurtain = () => { curtainTarget = curtainTarget > 0.5 ? 0 : 1; curtainSlide(curtainTarget === 1); audioScene(); };
 makeClickable(windowGroup, 'window', toggleCurtain);
 windowGroup.userData.when = () => tvMode === 'standby';
 
@@ -1545,12 +1586,12 @@ const WEATHER = { // fall speed m/s, sideways sway, size (m), colours, how many 
 };
 const wxMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, toneMapped: false,
-  uniforms: { uTime: { value: 0 }, uFall: { value: 0 }, uSway: { value: 0 }, uSize: { value: 0 }, uScale: { value: 1 },
+  uniforms: { uTime: { value: 0 }, uFall: { value: 0 }, uSway: { value: 0 }, uSize: { value: 0 }, uScale: { value: 1 }, uWind: { value: 0 },
     uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() }, uCount: { value: 0 }, uRound: { value: 1 },
     uLight: { value: 1 }, uY0: { value: fy - 0.85 }, uY1: { value: fy + 0.85 } },
   vertexShader: /* glsl */ `
     attribute float seed;
-    uniform float uTime, uFall, uSway, uSize, uScale, uCount, uY0, uY1;
+    uniform float uTime, uFall, uSway, uSize, uScale, uCount, uY0, uY1, uWind;
     varying float vSeed; varying float vShow;
     void main() {
       vSeed = seed;
@@ -1559,7 +1600,7 @@ const wxMat = new THREE.ShaderMaterial({
       vec3 p = position;
       float speed = uFall * (0.7 + 0.6 * seed);
       p.y = uY0 + mod(position.y - uY0 - uTime * speed, h);
-      p.x += sin(uTime * (0.6 + seed) + seed * 20.0) * uSway;
+      p.x += sin(uTime * (0.6 + seed) + seed * 20.0) * uSway * (1.0 + 1.5 * uWind) + uWind * 0.8 * (uY1 - p.y) / h; // the breeze carries them sideways as they fall
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       gl_PointSize = vShow * max(1.5, uScale * uSize * (0.6 + 0.8 * seed) / -mv.z);
       gl_Position = projectionMatrix * mv;
@@ -1614,18 +1655,18 @@ const rainGeo = new THREE.BufferGeometry();
 }
 const rainMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, toneMapped: false,
-  uniforms: { uTime: { value: 0 }, uSpeed: { value: 6 }, uLen: { value: 0.1 }, uColor: { value: new THREE.Color() }, uAlpha: { value: 0 },
+  uniforms: { uTime: { value: 0 }, uSpeed: { value: 6 }, uLen: { value: 0.1 }, uColor: { value: new THREE.Color() }, uAlpha: { value: 0 }, uWind: { value: 0 },
     uAmount: { value: 1 }, uY0: { value: fy - 0.85 }, uY1: { value: fy + 0.85 } },
   vertexShader: /* glsl */ `
     attribute float seed; attribute float tip;
-    uniform float uTime, uSpeed, uLen, uAmount, uY0, uY1;
+    uniform float uTime, uSpeed, uLen, uAmount, uY0, uY1, uWind;
     varying float vA;
     void main() {
       float h = uY1 - uY0;
       vec3 p = position;
       float sp = uSpeed * (0.8 + 0.4 * seed);
       p.y = uY0 + mod(position.y - uY0 - uTime * sp, h) + tip * uLen * (0.7 + 0.6 * seed);
-      p.x += tip * uLen * 0.18; // a slight slant in the wind
+      p.x += tip * uLen * (0.18 + 0.45 * uWind); // slanted by the wind
       vA = step(seed, uAmount) * (0.5 + 0.5 * tip);
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
@@ -1637,63 +1678,188 @@ const rainLines = noPick(new THREE.LineSegments(rainGeo, rainMat));
 rainLines.renderOrder = 1;
 rainLines.visible = false;
 scene.add(rainLines);
-// Drops on the pane: little beads that slide down in jerks and leave a faint trail, drawn procedurally
-// in a fragment shader (no texture), so they never repeat in an obvious way.
+// Rain on the glass (learner request, 5 Oct 2026: water running down the pane). A shader on a plane just in
+// front of the glass: three layers of beads that slide down in stop-and-go jerks (big and slow, medium, small
+// and quick), each leaving a wet trail with tiny beads behind it, plus still droplets. Every bead is a little
+// lens: it shows the picture outside upside down and much smaller (read back through uPane, the same picture the
+// window shows), with a darker rim, a light edge and a glint, so it reads as water and not as a faint dot. It is
+// procedural (no texture), so nothing repeats. Phones draw one layer (two cost the Redmi-class phone too much in the 5 Oct measurement).
 const dropsMat = new THREE.ShaderMaterial({
-  defines: { DROP_LAYERS: LITE ? 1 : 3 }, // phones: one layer of running drops (the shader runs per pixel of the pane)
+  defines: { DROP_LAYERS: LITE ? 1 : 3 },
   transparent: true, depthWrite: false, toneMapped: false,
-  uniforms: { uTime: { value: 0 }, uAmount: { value: 0 }, uLight: { value: 1 }, uAspect: { value: WIN.w / WIN.h } },
+  uniforms: {
+    uTime: { value: 0 }, uAmount: { value: 0 }, uLight: { value: 1 }, uAspect: { value: WIN.w / WIN.h }, uPane: { value: paneMap },
+    day: viewMat.uniforms.day, night: viewMat.uniforms.night, mixNight: viewMat.uniforms.mixNight, tint: viewMat.uniforms.tint, uGain: viewMat.uniforms.uGain, // shared with the view, so they always match
+  },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: /* glsl */ `
-    uniform float uTime, uAmount, uLight, uAspect; varying vec2 vUv;
+    uniform float uTime, uAmount, uLight, uAspect, mixNight, uGain;
+    uniform vec4 uPane;
+    uniform sampler2D day, night;
+    uniform vec3 tint;
+    varying vec2 vUv;
     float h1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+    const float BEAD = 0.5;   // size of every bead on the glass (1.0 was the first version; the learner found it too big)
+
+    // What the window shows at a place on the pane (0..1), lit like the view itself.
+    vec3 outside(vec2 g) {
+      vec2 p = uPane.xy + clamp(g, 0.0, 1.0) * uPane.zw;
+      vec3 a = pow(textureLod(day, p, 1.5).rgb, vec3(1.0 + (1.0 - uGain) * 1.4)) * tint * uGain;
+      return mix(a, textureLod(night, p, 1.5).rgb, mixNight);
+    }
+
+    // Keeps the most solid bead under this pixel: body 0..1, where inside the bead (-1..1), and its offset from the bead's centre.
+    void consider(float body, vec2 p, vec2 off, inout vec4 best, inout vec2 bestOff) {
+      if (body > best.x) { best = vec4(body, p, 0.0); bestOff = off; }
+    }
+
+    // One column of a layer carries one bead that slides down with a wet trail above it. The bead keeps going until
+    // its whole trail has left the pane, so nothing pops when it starts again at the top.
+    void slide(vec2 uv, float cols, float seed, float rad, float speed, float trailLen, float share, inout vec4 best, inout vec2 bestOff, inout float trail) {
+      float id = floor(uv.x * cols) + seed;
+      if (h1(id) > uAmount * share) return;
+      float fx = fract(uv.x * cols) - 0.5;
+      float jit = (h1(id + 3.0) - 0.5) * 0.26;
+      float t = uTime * speed * (0.6 + 0.8 * h1(id + 7.0)) + h1(id + 11.0) * 10.0;
+      float prog = t + 0.075 * sin(t * 12.566);           // moves, slows almost to a stop, moves again: never goes backwards
+      float span = 1.17 + trailLen;                        // how far one run goes, in pane heights
+      float y = 1.12 - fract(prog) * span;
+      float cyc = floor(prog);                             // which run this is, so every run leaves different droplets
+      float rr = rad * BEAD * (0.75 + 0.5 * h1(id + 13.0));
+      float k = cols * 0.78;                               // a bead is a little taller than wide
+      vec2 d0 = vec2(fx - jit - 0.05 * sin(prog * 9.0 + id), (uv.y - y) * k);
+      consider(smoothstep(1.0, 0.82, length(d0 / rr)), d0 / rr, vec2(d0.x / cols, uv.y - y), best, bestOff);
+      float above = uv.y - y;
+      if (above > 0.0 && above < trailLen) {
+        float fade = 1.0 - above / trailLen;
+        float old = 0.05 * sin((prog - above / span) * 9.0 + id);     // where the bead was when it passed this height
+        float w = (0.06 + 0.04 * h1(id + 5.0)) * BEAD * (0.5 + 0.5 * fade);
+        trail = max(trail, smoothstep(w, w * 0.35, abs(fx - jit - old)) * fade * 0.8);
+      }
+      // Tiny beads left behind on the glass by the passing bead: fixed cells down the column, lit only above the bead.
+      float sp = 0.06;
+      float cell = floor(uv.y / sp);
+      float cy = (cell + 0.5) * sp;
+      float gone = cy - y;                                 // how long ago (as a distance) the bead passed this cell
+      if (gone > 0.02 && gone < trailLen && h1(id * 1.7 + cell * 3.1 + cyc * 11.0) > 0.38) {
+        float fade = 1.0 - gone / trailLen;
+        float ox = (h1(id + cell * 7.3 + cyc) - 0.5) * 0.3;
+        vec2 db = vec2(fx - jit - ox, (uv.y - cy) * k);
+        float rb = rr * (0.34 + 0.3 * h1(id + cell * 5.9)) * (0.5 + 0.5 * fade);
+        consider(smoothstep(1.0, 0.75, length(db / rb)), db / rb, vec2(db.x / cols, uv.y - cy), best, bestOff);
+      }
+    }
+
+    // Droplets that stay where they landed.
+    void still(vec2 uv, float cols, float seed, float dens, float rad, inout vec4 best, inout vec2 bestOff) {
+      vec2 c = uv * cols;
+      vec2 g = floor(c);
+      float id = g.x * 13.0 + g.y * 71.0 + seed;
+      if (h1(id) > dens * uAmount) return;
+      vec2 ctr = 0.5 + (vec2(h1(id + 1.0), h1(id + 2.0)) - 0.5) * 0.5;
+      float rr = rad * BEAD * (0.6 + 0.8 * h1(id + 3.0));
+      vec2 p = (fract(c) - ctr) / rr;
+      consider(smoothstep(1.0, 0.8, length(p)), p, (fract(c) - ctr) / cols, best, bestOff);
+    }
+
     void main() {
       vec2 uv = vec2(vUv.x * uAspect, vUv.y);
-      // three layers of columns, each column carrying one sliding drop (a drop is a few millimetres
-      // across: a clear bead with a bright rim and a darker middle, like real water on glass)
-      float rim = 0.0;
-      float body = 0.0;
-      for (int L = 0; L < DROP_LAYERS; L++) {
-        float cols = 22.0 + float(L) * 14.0;
-        float cx = floor(uv.x * cols);
-        float id = cx + float(L) * 57.0;
-        if (h1(id) > uAmount) continue;
-        float fx = fract(uv.x * cols) - 0.5 - (h1(id + 3.0) - 0.5) * 0.4;
-        float speed = 0.05 + h1(id + 7.0) * 0.09;
-        float t = uTime * speed + h1(id + 11.0) * 10.0;
-        float jerk = t + 0.25 * sin(t * 6.283 * 2.0); // it moves in small jerks, like a real drop
-        float y = 1.0 - fract(jerk);
-        float r = 0.07 + h1(id + 13.0) * 0.06; // in column widths
-        float dist = length(vec2(fx, (uv.y - y) * cols * 0.75));
-        float inside = smoothstep(r, r * 0.8, dist);
-        rim = max(rim, inside * smoothstep(r * 0.45, r * 0.95, dist));
-        body = max(body, inside);
-        // the wet trail it leaves above it, thin and fading
-        float trail = smoothstep(0.035, 0.0, abs(fx)) * step(y, uv.y) * smoothstep(y + 0.3, y, uv.y);
-        rim = max(rim, trail * 0.35);
+      vec4 best = vec4(0.0);
+      vec2 bestOff = vec2(0.0);
+      float trail = 0.0;
+      slide(uv, 13.0, 0.0, 0.40, 0.045, 0.62, 0.5, best, bestOff, trail);
+      #if DROP_LAYERS > 1
+      slide(uv, 21.0, 57.0, 0.36, 0.08, 0.44, 0.55, best, bestOff, trail);
+      #endif
+      #if DROP_LAYERS > 2
+      slide(uv, 34.0, 131.0, 0.32, 0.12, 0.26, 0.5, best, bestOff, trail);
+      #endif
+      still(uv, 18.0, 7.0, 0.22, 0.24, best, bestOff);
+      still(uv, 40.0, 91.0, 0.2, 0.22, best, bestOff);
+      if (best.x < 0.03 && trail < 0.03) discard;
+      vec3 col;
+      float a;
+      if (best.x >= 0.03) {
+        vec2 p = best.yz;
+        vec2 po = vec2(bestOff.x / uAspect, bestOff.y);                 // from the bead's centre to this pixel, in pane uv
+        vec3 lens = outside(vUv - po * (11.0 / BEAD));                          // a wide piece of the picture around the bead, turned upside down and squeezed into it
+        float rim = smoothstep(0.42, 1.0, length(p));
+        col = lens * (1.12 - 0.62 * rim);
+        col += vec3(1.0, 0.96, 0.88) * smoothstep(0.75, 0.2, length(p - vec2(0.05, -0.5))) * 0.24 * uLight; // light gathers at the lower edge
+        col += vec3(1.0) * smoothstep(0.3, 0.0, length(p - vec2(-0.36, 0.4))) * 0.85 * uLight;              // the glint
+        a = best.x * 0.94;
+      } else {
+        col = mix(outside(vUv), vec3(0.82, 0.9, 0.98), 0.5) * 1.08;   // a wet streak: lighter and cooler than the dry glass
+        a = trail * 0.55;
       }
-      // fine still droplets scattered over the pane
-      vec2 cell = uv * vec2(90.0, 80.0);
-      vec2 g = floor(cell);
-      float sp = h1(g.x * 13.0 + g.y * 71.0);
-      if (sp > 1.0 - 0.08 * uAmount) {
-        float dd = length(fract(cell) - 0.5);
-        float rr = 0.12 + 0.1 * h1(g.x + g.y * 3.0);
-        float ins = smoothstep(rr, rr * 0.7, dd);
-        rim = max(rim, ins * smoothstep(rr * 0.3, rr, dd));
-        body = max(body, ins);
-      }
-      if (body < 0.02 && rim < 0.02) discard;
-      // the middle darkens a little (it refracts the darker ground), the rim catches the sky's light
-      vec3 col = mix(vec3(0.35, 0.4, 0.48), vec3(0.92, 0.96, 1.0), rim) * uLight;
-      float a = max(body * 0.16, rim * 0.5);
       gl_FragColor = vec4(col, a);
+      #include <colorspace_fragment>
     }`,
 });
 const drops = noPick(new THREE.Mesh(new THREE.PlaneGeometry(WIN.w, WIN.h), dropsMat));
 drops.position.set(fx, fy, WALL_Z + 0.035);
 drops.visible = false;
 scene.add(drops);
+
+// Fireflies (learner request, 5 Oct 2026): on a calm, dry night outside winter, a few dozen drift slowly over
+// the gardens outside the window and light up one after another, each on its own rhythm (a soft pulse of about a
+// second every three to six). One Points draw, moved and pulsed in the vertex shader. They fade in when the
+// night is calm (no wind) and out when it rains, snows or the day comes; the curtain hides them like the view.
+const FF_N = LITE ? 14 : 34;
+const FIREFLY_K = { snow: 0, spring: 0.8, summer: 1, dry: 0.55 }; // the share of the fireflies that show, by season
+const ffGeo = new THREE.BufferGeometry();
+{
+  const rr = rng(2026);
+  const base = new Float32Array(FF_N * 3);
+  const seed = new Float32Array(FF_N);
+  for (let i = 0; i < FF_N; i++) {
+    base.set([fx + (rr() - 0.5) * 1.5, fy - 0.42 + rr() * 0.42, WALL_Z - 0.2 - rr() * 1.0], i * 3);
+    seed[i] = rr();
+  }
+  ffGeo.setAttribute('position', new THREE.BufferAttribute(base, 3));
+  ffGeo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  ffGeo.boundingSphere = new THREE.Sphere(V(fx, fy - 0.2, WALL_Z - 0.7), 2.2);
+}
+const ffMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  uniforms: { uTime: { value: 0 }, uScale: { value: 1 }, uOpacity: { value: 0 }, uCount: { value: 1 } },
+  vertexShader: /* glsl */ `
+    attribute float seed;
+    uniform float uTime, uScale, uCount;
+    varying float vGlow; varying float vHue;
+    void main() {
+      float t = uTime + seed * 100.0;
+      // a slow, wandering flight (sums of sines at unrelated speeds)
+      vec3 w = vec3(sin(t * 0.21 + seed * 9.0) + 0.5 * sin(t * 0.53 + seed * 17.0),
+                    0.6 * sin(t * 0.17 + seed * 5.0) + 0.3 * sin(t * 0.47 + seed * 23.0),
+                    0.8 * cos(t * 0.19 + seed * 11.0));
+      vec3 p = position + w * vec3(0.12, 0.07, 0.10);
+      float period = 3.2 + 3.6 * fract(seed * 7.13);
+      float flash = pow(sin(clamp(fract(t / period) / 0.24, 0.0, 1.0) * 3.14159), 2.0); // lit for a quarter of its period, smooth both ways
+      flash *= 0.75 + 0.25 * sin(t * 9.0 + seed * 40.0);                                   // a soft shimmer inside the flash
+      float show = step(seed, uCount);
+      vGlow = flash * show;
+      vHue = fract(seed * 3.7);
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = show * max(3.0, uScale * (0.03 + 0.03 * flash) / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform float uOpacity;
+    varying float vGlow; varying float vHue;
+    void main() {
+      float d = length(gl_PointCoord - 0.5) * 2.0;
+      float a = (smoothstep(0.32, 0.0, d) + pow(smoothstep(1.0, 0.0, d), 2.0) * 0.5) * (0.02 + vGlow) * uOpacity;
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(mix(vec3(0.72, 1.0, 0.29), vec3(1.0, 0.92, 0.42), vHue) * 1.4, a);
+    }`,
+});
+const fireflies = noPick(new THREE.Points(ffGeo, ffMat));
+fireflies.renderOrder = 2;
+fireflies.visible = false;
+scene.add(fireflies);
+let ffShown = 0; // eased 0..1, like the rain
+
 let rainShown = 0; // eased 0..1, so rain fades in and out with the switch
 function applyRain(name) {
   const p = RAIN[name];
@@ -1727,15 +1893,15 @@ function setSeason(m) {
   history.replaceState(null, '', url);
   loadSeason(seasonName());
   applyWeather(seasonName());
-  setSeasonSound(seasonName());
+  audioScene();
 }
 
 // Time of day (prd.md > Look and Feel): four periods by the visitor's local hour, plus ?time=.
 const PERIODS = {
-  morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97, disc: 0xffc880, discSize: 1.0, beam: 0xffd9a0, beamO: 0.3, lamp: 0 },
-  day: { sun: 0xfff6e6, sunI: 3.0, sky: 0xe6f1ff, ground: 0x7a6a58, hemiI: 1.25, env: 0.7, glow: 0xffffff, glowO: 0.3, night: 0, tint: [1, 1, 1], tv: 0.15, exposure: 0.95, disc: 0xfff6dc, discSize: 0.85, beam: 0xfff2cc, beamO: 0.24, lamp: 0 },
-  afternoon: { sun: 0xff7a2a, sunI: 3.0, sky: 0xff9a55, ground: 0x6b3a22, hemiI: 1.0, env: 0.18, glow: 0xff8a3a, glowO: 0.7, night: 0.15, tint: [1.2, 0.75, 0.5], tv: 0.4, exposure: 1.05, disc: 0xff8a2a, discSize: 1.25, beam: 0xff9a40, beamO: 0.42, lamp: 0.45 },
-  night: { sun: 0x8fa8ff, sunI: 0.8, sky: 0x3f5bb0, ground: 0x121830, hemiI: 0.42, env: 0.08, glow: 0x6f8cff, glowO: 0.18, night: 1, tint: [0.34, 0.47, 0.9], tv: 2.5, exposure: 1.1, disc: 0xcfe0ff, discSize: 0.5, beam: 0x8fa8ff, beamO: 0.09, lamp: 1 },
+  morning: { sun: 0xffbc78, sunI: 2.2, sky: 0xffd4a8, ground: 0x6b5644, hemiI: 0.95, env: 0.4, glow: 0xffc590, glowO: 0.5, night: 0, tint: [1.1, 0.95, 0.8], tv: 0.3, exposure: 0.97, disc: 0xffc880, discSize: 1.0, beam: 0xffd9a0, beamO: 0.3, lamp: 0, wind: 0.55 },
+  day: { sun: 0xfff6e6, sunI: 3.0, sky: 0xe6f1ff, ground: 0x7a6a58, hemiI: 1.25, env: 0.7, glow: 0xffffff, glowO: 0.3, night: 0, tint: [1, 1, 1], tv: 0.15, exposure: 0.95, disc: 0xfff6dc, discSize: 0.85, beam: 0xfff2cc, beamO: 0.24, lamp: 0, wind: 1.0 },
+  afternoon: { sun: 0xff7a2a, sunI: 3.0, sky: 0xff9a55, ground: 0x6b3a22, hemiI: 1.0, env: 0.18, glow: 0xff8a3a, glowO: 0.7, night: 0.15, tint: [1.2, 0.75, 0.5], tv: 0.4, exposure: 1.05, disc: 0xff8a2a, discSize: 1.25, beam: 0xff9a40, beamO: 0.42, lamp: 0.45, wind: 0.75 },
+  night: { sun: 0x8fa8ff, sunI: 0.8, sky: 0x3f5bb0, ground: 0x121830, hemiI: 0.42, env: 0.08, glow: 0x6f8cff, glowO: 0.18, night: 1, tint: [0.34, 0.47, 0.9], tv: 2.5, exposure: 1.1, disc: 0xcfe0ff, discSize: 0.5, beam: 0x8fa8ff, beamO: 0.09, lamp: 1, wind: 0 },
 };
 const ALIASES = { pagi: 'morning', siang: 'day', sore: 'afternoon', malam: 'night' };
 const asked = (params.get('time') ?? '').toLowerCase();
@@ -1749,7 +1915,7 @@ function periodFor(hour) {
 }
 const currentName = () => (mode === 'auto' ? periodFor(new Date().getHours()) : mode);
 
-const NUM = ['sunI', 'hemiI', 'env', 'glowO', 'night', 'tv', 'exposure', 'discSize', 'beamO'];
+const NUM = ['sunI', 'hemiI', 'env', 'glowO', 'night', 'tv', 'exposure', 'discSize', 'beamO', 'wind'];
 const COL = ['sun', 'sky', 'ground', 'glow', 'tint', 'disc', 'beam'];
 const A = { lamp: 0 }; // what is on screen right now
 const C = Object.fromEntries(COL.map((c) => [c, new THREE.Color()]));
@@ -1768,12 +1934,29 @@ function setTarget(name) {
   T.col.disc.set(p.disc);
   T.col.beam.set(p.beam);
   T.col.tint.setRGB(...p.tint);
+  audioScene(name);
 }
 setTarget(currentName());
 for (const n of NUM) A[n] = T.num[n]; // start already at the target, so the first frame is right
 A.lamp = T.num.lamp;
 for (const c of COL) C[c].copy(T.col[c]);
 const lampState = () => ({ auto: T.num.lamp, on: A.lamp, light: lampLight.intensity, override: lampOverride });
+
+// The breeze: each period has its own strength (none at night), each season its character (the dry season is
+// windy, the snow still), and gusts swell and fade on top. The same number drives the trees' sway, the drift of
+// petals, leaves and rain, and the sound of the wind, so what you see and what you hear move together.
+const WIND_SEASON = { snow: 0.6, spring: 1.0, summer: 0.85, dry: 1.3 };
+let windNow = 0;
+const dbg = { wind: null, time: null }; // checks only: hold the wind and the view's clock for a repeatable screenshot
+function gustAt(t) { // 0..1: a slow swell with quicker ones riding on it
+  const g = 0.5 + 0.28 * Math.sin(t * 0.23 + 1.3) + 0.14 * Math.sin(t * 0.61 + 0.4) + 0.08 * Math.sin(t * 1.37 + 2.2);
+  return THREE.MathUtils.clamp(g, 0, 1);
+}
+// Tells the sound module what the window shows (season, time of day, curtain), so each scene sounds like itself.
+function audioScene(period = T.name || currentName()) {
+  setSeasonSound(seasonName());
+  snd.setScene?.({ season: seasonName(), period, curtainOpen: curtainTarget > 0.5 });
+}
 
 // ── The TV screen in the room: standby status, and the tape going in ──
 
@@ -1961,10 +2144,12 @@ const aim = new THREE.Vector2(0, 0); // the eased pointer the camera follows
 let hasPointer = false;
 let pressT = 1;
 let hover = null;
-const HOVERABLE = ['vcr', 'screen', 'window', 'lamp', 'frame'];
+const HOVERABLE = ['vcr', 'screen', 'window', 'lamp', 'frame', 'simon'];
+// Simon, the sleeping cat (js/cat.js). The holder is here so the hover code can see him; he is built further down.
+const simon = { cat: null, group: null, seed: 0, tap: 0 };
 const hoverAmt = Object.fromEntries(HOVERABLE.map((n) => [n, 0])); // 0..1, eased
 const tvGlass = { emissive: 0 };
-const HOVER_TEXT = { vcr: 'VCR · OPEN THE TAPES', screen: 'TV · OPEN THE TAPES', window: 'CURTAIN', lamp: 'LAMP', frame: 'PHOTO' };
+const HOVER_TEXT = { vcr: 'VCR · OPEN THE TAPES', screen: 'TV · OPEN THE TAPES', window: 'CURTAIN', lamp: 'LAMP', frame: 'PHOTO', simon: 'SIMON' };
 const hoverLabel = document.querySelector('[data-hover-label]');
 let labelFor = null;
 const _lbl = new THREE.Vector3();
@@ -1974,7 +2159,7 @@ function updateHoverLabel() {
   for (const n of HOVERABLE) if (hoverAmt[n] > 0.02 && (!best || hoverAmt[n] > hoverAmt[best])) best = n;
   if (!best) { hoverLabel.style.opacity = '0'; labelFor = null; return; }
   if (labelFor !== best) { hoverLabel.textContent = HOVER_TEXT[best]; labelFor = best; }
-  const root = { vcr, screen, window: windowGroup, lamp, frame }[best];
+  const root = { vcr, screen, window: windowGroup, lamp, frame, simon: simon.group }[best];
   const b = solidBox(root);
   _lbl.set((b.min.x + b.max.x) / 2, b.max.y + 0.06, (b.min.z + b.max.z) / 2).project(camera);
   hoverLabel.style.transform = `translate(${((_lbl.x + 1) / 2) * innerWidth}px, ${((1 - _lbl.y) / 2) * innerHeight}px) translate(-50%, -100%)`;
@@ -2181,6 +2366,7 @@ function resize() {
   // pixels per metre at 1 m away, so a speck keeps its real size whatever the window or lens
   dustMat.uniforms.uScale.value = (innerHeight * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   wxMat.uniforms.uScale.value = dustMat.uniforms.uScale.value;
+  ffMat.uniforms.uScale.value = dustMat.uniforms.uScale.value;
   gradePass.uniforms.uAspect.value = innerWidth / innerHeight;
   css.setSize(innerWidth, innerHeight);
   const aspect = innerWidth / innerHeight;
@@ -2316,8 +2502,8 @@ function roomFrame(now) {
   const stillCloth = reduced.matches || LITE; // phones: no breathing folds (a costly reshape every frame)
   const clothKey = `${pw.toFixed(4)}|${cloth.lag.toFixed(4)}|${hoverAmt.window.toFixed(3)}`;
   if (!stillCloth || clothKey !== lastClothKey) {
-    shapeCurtain(curtainL, pw, t, stillCloth, hoverAmt.window);
-    shapeCurtain(curtainR, pw, t, stillCloth, hoverAmt.window);
+    shapeCurtain(curtainL, pw, t, stillCloth, hoverAmt.window, windNow);
+    shapeCurtain(curtainR, pw, t, stillCloth, hoverAmt.window, windNow);
     lastClothKey = clothKey;
   }
 
@@ -2343,7 +2529,20 @@ function roomFrame(now) {
   glowMat.opacity = A.glowO * (0.35 + 0.65 * co) * WEATHER[seasonName()].glare * (1 - 0.6 * rainShown); // pale pictures (snow, haze) get less glare
   viewMat.uniforms.mixNight.value = A.night;
   viewMat.uniforms.tint.value.copy(C.tint);
-  viewMat.uniforms.uTime.value = reduced.matches ? 0 : t;
+  // Wind and fireflies (see WIND_SEASON and the fireflies block).
+  const windSound = Math.max(A.wind * WIND_SEASON[seasonName()] * (1 + 0.25 * rainShown), 0.22 * rainShown) * (0.3 + 0.7 * gustAt(t));
+  windNow = Math.min(1, dbg.wind ?? (reduced.matches ? 0 : windSound)); // never above 1: the sway was checked not to fold the picture up to there
+  viewMat.uniforms.uWind.value = windNow;
+  wxMat.uniforms.uWind.value = windNow;
+  rainMat.uniforms.uWind.value = windNow;
+  if (frameNo % 6 === 0) snd.setWind?.(Math.min(1, windSound)); // the sound swells with the same gust (also with reduced motion)
+  const ffWant = A.night > 0.75 && seasonName() !== 'snow' && !rainOn() && !reduced.matches && windNow < 0.2 && z < 0.98 ? 1 : 0;
+  ffShown += (ffWant - ffShown) * k(0.9, dt);
+  ffMat.uniforms.uOpacity.value = ffShown;
+  ffMat.uniforms.uCount.value = FIREFLY_K[seasonName()];
+  ffMat.uniforms.uTime.value = reduced.matches ? 0 : t;
+  fireflies.visible = ffShown > 0.01;
+  viewMat.uniforms.uTime.value = dbg.time ?? (reduced.matches ? 0 : t);
   wxMat.uniforms.uTime.value = reduced.matches ? 0 : t;
   wxMat.uniforms.uLight.value = 1 - 0.55 * A.night; // flakes and petals dim at night
   weather.visible = WEATHER[seasonName()].count > 0 && z < 0.98;
@@ -2384,15 +2583,17 @@ function roomFrame(now) {
     hover = clickableAt(pointer.x, pointer.y)?.userData.name ?? null;
   }
   if (!hasPointer || tvMode !== 'standby') hover = null;
-  stage.style.cursor = cord.held ? 'grabbing' : hover ? 'pointer' : '';
+  stage.style.cursor = cord.held ? 'grabbing' : hover && hover !== 'simon' ? 'pointer' : ''; // he is not a button
   // Each clickable thing's highlight fades in and out (about 0.2 s), and a small label with its name
   // fades in above it, so the player sees what can be clicked.
-  for (const n of HOVERABLE) hoverAmt[n] += ((hover === n ? 1 : 0) - hoverAmt[n]) * k(reduced.matches ? 60 : 12, dt);
+  simon.tap = Math.max(0, simon.tap - dt);
+  for (const n of HOVERABLE) hoverAmt[n] += (((hover === n || (n === 'simon' && simon.tap > 0)) ? 1 : 0) - hoverAmt[n]) * k(reduced.matches ? 60 : 12, dt);
   updateHoverLabel();
   // The glass reflection reads as glass from the room; in the TV it would wash over the app.
   tvSheen.material.opacity = 0.55 * (1 - 0.85 * z) + 0.25 * hoverAmt.screen;
 
   pic.material.emissive.setScalar(0.16 * hoverAmt.frame);
+  if (simon.cat) { simon.cat.setGlow(hoverAmt.simon); simon.cat.update(t, reduced.matches); } // he breathes; his tail drifts; still with reduced motion
 
   // Curtain fabric: light shines through it when it is closed (daylight behind it); hover brightens it.
   curtainMat.emissive.copy(C.glow).multiplyScalar((1 - co) * Math.min(1.2, A.sunI / 3) * 0.16); // a soft glow through the cloth; more would flatten the folds
@@ -2593,12 +2794,110 @@ for (const sx of [-1, 1]) {
   aoBand(FLOOR_LEN, AO_WALL, sx * (ROOM.w / 2 - 0.004), AO_WALL / 2, BACK + FLOOR_LEN / 2, 0, -sx * Math.PI / 2, 0.3);
 }
 
+// ── Simon, the sleeping cat (learner request, 5 Oct 2026) ─────────────
+// js/cat.js builds one sleeping cat from a seed: a new pose and coat on every visit, or a fixed one with
+// ?cat=<number or any word> and ?pose=<name or number> for filming and for the checks (like ?books=). He lies
+// on the rug where the home camera sees him. Hovering him shows his name; a tap does the same on a touch screen.
+const CAT_AT = { x: 1.3, z: -0.95 }; // where he sleeps: on the floor between the cabinet and the armchair (the camera sees it all)
+const CAT_Y = 0.004; // on the floor; the floor shading sits just above it
+const turnToCamera = (cat) => { // turn him about the vertical axis so his face looks toward the camera, but never more than ~45 deg
+  let a = Math.atan2(cat.faceDir[1], cat.faceDir[0]) - Math.PI / 2;
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  return THREE.MathUtils.clamp(a, -0.8, 0.8);
+};
+const catBlob = noPick(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), contactMat(blobTex.texture, 0.4)));
+catBlob.rotation.order = 'YXZ';
+catBlob.rotation.x = -Math.PI / 2;
+catBlob.renderOrder = 2;
+scene.add(catBlob);
+contact.push(catBlob);
+function buildSimon(seed, pose, x = CAT_AT.x, z = CAT_AT.z, turn = null) {
+  if (simon.group) {
+    scene.remove(simon.group);
+    simon.group.traverse((o) => { if (o.name === 'simon-hit') { o.geometry.dispose(); o.material.dispose(); } });
+    simon.cat.dispose();
+  }
+  const cat = makeCat({ seed, pose, lite: LITE });
+  const g = cat.group;
+  const ry = turn ?? turnToCamera(cat);
+  makeClickable(g, 'simon', () => { simon.tap = 1.8; }); // a tap keeps his name up for a moment (a touch screen has no hover)
+  g.userData.when = () => tvMode === 'standby'; // not clickable from inside the TV
+  // A sleeping cat is a small target (about 6 % of the picture's width), so an invisible box a little bigger than he is
+  // takes the pointer too, more on a touch screen. It is not drawn, not merged, and does not count as part of his size.
+  const pad = TOUCH ? 0.14 : 0.06;
+  const hit = hitBox(cat.size.length + 2 * pad, cat.size.height + pad, cat.size.width + 2 * pad);
+  hit.position.set(0, (cat.size.height + pad) / 2, 0);
+  hit.name = 'simon-hit';
+  g.add(hit);
+  g.position.set(x, CAT_Y, z);
+  g.rotation.y = ry;
+  scene.add(g);
+  catBlob.position.set(x, CAT_Y + 0.0002, z);
+  catBlob.rotation.y = ry;
+  catBlob.scale.set(cat.size.length * 1.4 + 0.12, cat.size.width * 1.6 + 0.12, 1);
+  Object.assign(simon, { cat, group: g, seed });
+  shadowsDirty = true;
+}
+{
+  const want = params.get('pose');
+  buildSimon(seedFromParam(params.get('cat')) ?? randomSeed(), want && /^\d+$/.test(want) ? Number(want) : want || undefined);
+}
+
 // For the automated checks (the room is a module, so they need a handle on it).
 window.__room = {
   rain: () => ({ on: rainOn(), shown: rainShown, lines: rainLines.visible, drops: drops.visible, amount: dropsMat.uniforms.uAmount.value, alpha: rainMat.uniforms.uAlpha.value, speed: rainMat.uniforms.uSpeed.value }),
   books: () => bookshelf.userData.books.map(({ x, y, w, h, lean, row, kind, on, color }) => ({ x, y, w, h, lean, row, kind, on, color })),
   bookSeed: () => bookshelf.userData.seed,
   bookStats: () => ({ ...bookshelf.userData.bookStats }),
+  wind: () => ({ now: windNow, period: A.wind, uniform: viewMat.uniforms.uWind.value, mask: viewMat.uniforms.sway.value !== blackMask, held: dbg.wind, season: seasonName() }),
+  holdWind: (level, time = null) => { dbg.wind = level; dbg.time = time; },
+  fireflies: () => ({ count: FF_N, shown: ffShown, visible: fireflies.visible, opacity: ffMat.uniforms.uOpacity.value }),
+  glass: () => ({ visible: drops.visible, amount: dropsMat.uniforms.uAmount.value, layers: LITE ? 1 : 3, pane: paneMap.toArray() }),
+  simon: () => {
+    const b = solidBox(simon.group);
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const zz of [b.min.z, b.max.z]) {
+      const p = toPixels(V(x, y, zz)); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    const c = toPixels(b.getCenter(_p));
+    let verts = 0;
+    simon.group.traverse((o) => { if (o.isMesh) verts += o.geometry.attributes.position.count; });
+    return { pose: simon.cat.pose.name, fur: simon.cat.fur, seed: simon.seed, at: simon.group.position.toArray(), ry: simon.group.rotation.y, size: simon.cat.size, centre: { x: c.x, y: c.y },
+      box: { x0, x1, y0, y1 }, world: { min: b.min.toArray(), max: b.max.toArray() }, glow: hoverAmt.simon, tap: simon.tap, breath: simon.group.children[0].scale.y, verts };
+  },
+  // How much of him the camera really sees: rays through his screen box that meet him, and of those, the ones
+  // that reach him without anything else in front.
+  simonVisible: () => {
+    const rc = new THREE.Raycaster();
+    const isCat = (o) => { for (let p = o; p; p = p.parent) if (p === simon.group) return true; return false; };
+    const b = solidBox(simon.group);
+    let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+    for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const zz of [b.min.z, b.max.z]) {
+      const p = V(x, y, zz).project(camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    let onCat = 0, seen = 0, best = null, bestD = 9;
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    for (let i = 0; i <= 30; i++) for (let j = 0; j <= 20; j++) {
+      const nx = x0 + (x1 - x0) * i / 30, ny = y0 + (y1 - y0) * j / 20;
+      rc.setFromCamera(_ndc.set(nx, ny), camera);
+      rc.far = Infinity;
+      const hc = rc.intersectObject(simon.group, true).find((q) => q.object.material?.visible !== false); // him, not his hit box
+      if (!hc) continue;
+      onCat++;
+      rc.far = hc.distance - 0.004;
+      if (!rc.intersectObjects(scene.children, true).some((h) => !isCat(h.object) && h.object.raycast !== NOOP && h.object.material?.visible !== false)) {
+        seen++;
+        const d = Math.hypot(nx - mx, ny - my);
+        if (d < bestD) { bestD = d; best = [nx, ny]; }
+      }
+    }
+    // pixel: the visible point of him nearest the middle of his box (a donut's middle is a hole)
+    return { onCat, seen, share: onCat ? seen / onCat : 0, inFrame: x0 > -1 && x1 < 1 && y0 > -1 && y1 < 1,
+      pixel: best ? { x: ((best[0] + 1) / 2) * innerWidth, y: ((1 - best[1]) / 2) * innerHeight } : null };
+  },
+  setCat: (o = {}) => { buildSimon(o.seed ?? simon.seed, o.pose, o.x, o.z, o.ry ?? null); return simon.cat.pose.name; },
+  // Where (in CSS pixels) a world point lands, for the hover checks.
+  pixelOf: (x, y, z) => { const p = toPixels(V(x, y, z)); return { x: p.x, y: p.y }; },
   layout: () => {
     const bx = (o) => new THREE.Box3().setFromObject(o);
     const c = bx(clockGroup); const l = { min: { x: SIDE.x - SIDE.w / 2 }, max: { x: SIDE.x + SIDE.w / 2 } }; // the table itself (the lamp's light and glow make its box huge)

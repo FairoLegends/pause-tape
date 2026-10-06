@@ -30,8 +30,8 @@ On a phone or tablet the 3D room works by touch, in a lighter mode so it stays s
 - **Playback:** blue VCR loading screen, the "MESSAGE FROM …" intro, your voice note, answers revealed one by one with a tape glitch ("NO SIGNAL" for empty ones), ▶▶ to skip, then the first step and the 10-minute timer.
 - **PAUSE AGAIN:** from the BACK ON IT screen, record the next tape for the same project.
 - **Erase, backup, restore:** ⏏ on a tape erases it (after a confirmation). BACKUP downloads your tapes as a `.json` file, and RESTORE adds them back from one.
-- **The room** (laptops and desktops): a 3D living room around the TV. The light follows the time of day, the window view changes with the season (snow, spring, summer, dry season), and the books on the shelf are arranged anew at every visit. You can open and close the curtain, pull the lamp's cord, put your own photo in the frame, and watch the cassette go in and come out of the VCR. **ROOM CONTROLS** (top right) lets you change the time of day and the season, turn rain on, and switch on REDUCE MOTION or HIGH CONTRAST. **HOW IT WORKS** lists the AI model and the prompts behind the pictures.
-- **Sound** (off until you turn it on): rain, a ticking clock, quiet lo-fi, season ambience, and VCR, tape and TV effects. Everything is made in code with the Web Audio API.
+- **The room** (laptops and desktops): a 3D living room around the TV. The light follows the time of day, the window view changes with the season (snow, spring, summer, dry season), and the books on the shelf are arranged anew at every visit. By day a breeze moves the trees outside; on calm nights outside winter, fireflies drift over the gardens; in the rain, water runs down the glass. Simon, a sleeping cat, lies on the floor in a new pose at every visit, and shows his name when you point at him. You can open and close the curtain, pull the lamp's cord, put your own photo in the frame, and watch the cassette go in and come out of the VCR. **ROOM CONTROLS** (top right) lets you change the time of day and the season, turn rain on, and switch on REDUCE MOTION or HIGH CONTRAST. **HOW IT WORKS** lists the AI model and the prompts behind the pictures.
+- **Sound** (off until you turn it on): rain, a ticking clock, quiet lo-fi, outdoor sounds that follow the season, the time of day and the curtain, and VCR, tape and TV effects. Made in code with the Web Audio API, except the rain, which is a recording (see Credits).
 
 ## Where your data lives
 
@@ -61,6 +61,7 @@ Useful addresses for testing and demos:
 | `http://localhost:8000/?season=snow` (or `spring`, `summer`, `dry`) | Fixes the season outside the window |
 | `http://localhost:8000/?flat` | The flat TV without the 3D room |
 | `http://localhost:8000/?books=18` (any number or word) | Fixes the arrangement of the books on the shelf. Without it, every visit gets a new one |
+| `http://localhost:8000/?cat=7` (any number or word), and `&pose=sploot` (`curled`, `loaf`, `side`, `back`, `sploot`, `croissant`, `sphinx`, or a number 0-6) | Fixes Simon the cat's coat and pose. Without them, every visit gets a new cat |
 
 **Reset for a demo from an empty shelf:** open DevTools (F12) → Application → Local Storage → `http://localhost:8000`, and delete the keys that start with `pausetape.`. The sample tape comes back once the shelf is empty again.
 
@@ -91,6 +92,8 @@ Plain HTML, CSS and JavaScript modules: no framework, no build step, no backend.
 - `js/crt.js`: the VHS shader layer.
 - `js/room.js`: the three.js room, where the real app screen sits on the 3D TV's glass with `CSS3DRenderer`.
 - `js/books.js`: places the books on the bookshelf, a new arrangement at every visit (a leaning book always rests on a neighbour).
+- `js/cat.js`: builds Simon, the sleeping cat, from a seed (six poses picked at random, a seventh with `?pose=back`).
+- `js/ambience.js`: the sounds of the view outside the window (birds, insects, wind, rain), one scene for each season and time of day.
 - Libraries are vendored in `assets/vendor/`: three.js r186 and GSAP 3.15 (text scramble and timing).
 
 ## Credits
@@ -98,7 +101,7 @@ Plain HTML, CSS and JavaScript modules: no framework, no build step, no backend.
 - **AI-generated pictures:** the window views and the two paintings were generated with **Seedream 5.0 pro** (`dola-seedream-5-0-pro-260628`, by BytePlus), reached through an OpenAI-compatible API gateway, with no people, logos, text or watermarks. The night views were made from the day pictures with a small image script. The `.jpg` originals keep their C2PA content credentials.
 - **Font:** [VT323](https://github.com/google/fonts/tree/main/ofl/vt323) by Peter Hull, SIL Open Font License 1.1 (`assets/fonts/OFL.txt`).
 - **Libraries:** [three.js](https://threejs.org/) (MIT) and [GSAP](https://gsap.com/) (GSAP standard no-charge license).
-- **Sound:** all generated in code, with no audio files.
+- **Sound:** the room's sounds are generated in code (Web Audio API). The one exception is the rain: `assets/audio/rain-window.mp3` is a 60-second loop cut from **"Rain (on the window)" by DonRain** on [Pixabay](https://pixabay.com/sound-effects/nature-rain-on-the-window-114709/), used under the [Pixabay Content License](https://pixabay.com/service/license-summary/). If the file cannot load, the app falls back to rain made in code.
 - **Built with AI coding agents** (Claude Code and Hermes Agent), following the Devpost Learn skill pack (`agent/skills/`).
 
 Full list with the license of every bundled file: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

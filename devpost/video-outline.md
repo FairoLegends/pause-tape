@@ -111,6 +111,9 @@ Draf darimu: *"It feels like a message from my old version."* Kalimat ini mengga
 
 - **Mulai bersih:** hapus key `pausetape.` milik app (README → langkah reset) **sebelum** merekam tape 4 Okt, jangan sesudahnya. Dengan begitu rak hanya berisi tape itu dan apa yang kamu rekam di depan kamera.
 - **Rak buku yang sama di setiap take:** rak buku di ruangan kini disusun ulang setiap halaman dibuka, termasuk saat reload. Buka situs dengan `https://fairolegends.github.io/pause-tape/?books=[angka pilihanmu]` untuk semua take, supaya susunan buku tidak berubah antar potongan adegan 1, 2, dan 6. Pilih satu angka, lalu catat di bagian Keputusan.
+- **Kucing yang sama di setiap take:** Simon juga berganti pose tiap halaman dibuka. Tambahkan `&cat=[angka pilihanmu]` (dan `&pose=sploot` atau pose lain) ke URL, misalnya `.../pause-tape/?books=18&cat=7`.
+- **Kunang-kunang dan hujan tidak bisa dalam satu take:** kunang-kunang hanya muncul di malam tenang tanpa hujan (`?time=night&season=summer`). Untuk adegan malam dengan hujan, kunang-kunang tidak tampil; pilih salah satu atau ambil dua take.
+- **Suara hujan:** rekaman hujan memutar setelah kamu klik sekali dan SOUND menyala. Pelankan lewat editing kalau menutupi narasi.
 - **Layar penuh:** tekan F11 di browser supaya logo browser, tab, dan address bar tidak terlihat. Sembunyikan taskbar. Tutup jendela lain dan notifikasi (Windows Focus / Jangan Ganggu).
 - **Merek:** aplikasi kalender di adegan 4 menampilkan mereknya sendiri. Crop atau zoom ke acaranya saja (tanggal dan judul), tanpa logo atau nama aplikasi di frame.
 - **Tanpa data pribadi di frame:** alamat email, nama lengkap, path file berisi nama user, atau tab lain tidak boleh terlihat.

@@ -1,10 +1,11 @@
 // Sound (prd.md > The room around the TV): every sound is made in code with the Web Audio API, so the
 // app ships no audio files and no third-party recordings. Like an AudioMixer in Unity: one master gain
-// (the SOUND switch), an ambience bus (rain, the clock, a quiet lo-fi loop) and an effects bus (VCR
+// (the SOUND switch), an ambience bus (the view outside the window, the clock, a quiet lo-fi loop) and an effects bus (VCR
 // click, tape going in, TV static). Nothing plays until the player turns SOUND on, which is also the
 // click browsers require before any audio can start. Off by default.
 
 import { soundOn, musicOn, setPref, reducedMotion } from './prefs.js';
+import { createAmbience, SEASONS, PERIODS } from './ambience.js';
 
 // Rain is a separate switch (learner choice: only when picked), saved in this browser.
 const RAIN_KEY = 'pausetape.rain.v1';
@@ -17,12 +18,12 @@ let effects;
 let noiseBuffer;
 let started = false;
 let lofiTimer = null;
-let rainBus = null;
 let musicBus = null;
-let seasonBus = null;
-let seasonTimer = null;
+let amb = null; // the view outside the window (js/ambience.js): birds, insects, wind, rain on clay tiles
 let season = 'spring';
-let seasonNodes = [];
+let period = null; // null = follow the clock until the room says which time of day it shows
+let curtainOpen = true;
+let periodTimer = null;
 const played = {}; // how many times each effect has played (for the checks)
 let tickTimer = null;
 
@@ -48,9 +49,6 @@ function setup() {
   effects = ctx.createGain();
   effects.gain.value = 0.8;
   effects.connect(master);
-  seasonBus = ctx.createGain();
-  seasonBus.gain.value = 1;
-  seasonBus.connect(ambience);
   musicBus = ctx.createGain(); // the lo-fi loop: the MUSIC switch
   musicBus.gain.value = musicOn() ? 1 : 0;
   musicBus.connect(ambience);
@@ -59,34 +57,42 @@ function setup() {
 
 // ── Ambience ─────────────────────────────────────────────────────────
 
-// Rain on the window: filtered noise, a soft bed plus a brighter patter that swells slowly.
-function startRain() {
-  const src = ctx.createBufferSource();
-  src.buffer = noiseBuffer;
-  src.loop = true;
-  const low = ctx.createBiquadFilter();
-  low.type = 'lowpass';
-  low.frequency.value = 1100;
-  rainBus = ctx.createGain();
-  rainBus.gain.value = rainOn() ? 1 : 0;
-  rainBus.connect(ambience);
-  const bed = ctx.createGain();
-  bed.gain.value = 0.16;
-  src.connect(low).connect(bed).connect(rainBus);
-  const high = ctx.createBiquadFilter();
-  high.type = 'bandpass';
-  high.frequency.value = 3200;
-  high.Q.value = 0.7;
-  const patter = ctx.createGain();
-  patter.gain.value = 0.05;
-  src.connect(high).connect(patter).connect(rainBus);
-  const lfo = ctx.createOscillator(); // the rain swells and eases every few seconds
-  lfo.frequency.value = 0.09;
-  const depth = ctx.createGain();
-  depth.gain.value = 0.03;
-  lfo.connect(depth).connect(patter.gain);
-  src.start();
-  lfo.start();
+// The view through the window: birds, insects, wind and rain on clay roof tiles. All of it is made by
+// js/ambience.js (one scene per season x time of day, plus the rain) on this same AudioContext, like
+// one AudioMixer group in Unity. OUTDOOR_GAIN keeps it under the clock's tick: measured on offline
+// renders, the outdoors sit 3 to 48 dB below the tick in the tick's own bands (1.9 and 2.6 kHz).
+const OUTDOOR_GAIN = 0.28;
+const periodFor = (hour) => (hour >= 5 && hour < 10 ? 'morning' : hour >= 10 && hour < 15 ? 'day' : hour >= 15 && hour < 18 ? 'afternoon' : 'night');
+const scenePeriod = () => period ?? periodFor(new Date().getHours()); // the same hours as the room's clock
+const sceneNow = () => ({ season, period: scenePeriod(), rain: rainOn(), curtainOpen });
+// The rain is a real recording (DonRain, "Rain (on the window)", Pixabay Content License), cut into a 60 s loop.
+// It is fetched and decoded once; if that fails, the code-made rain plays instead.
+let rainBuffer = null;
+let rainLoading = null;
+function loadRainRecording() {
+  rainLoading ??= fetch(new URL('../assets/audio/rain-window.mp3', import.meta.url))
+    .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+    .then((b) => ctx.decodeAudioData(b))
+    .then((buf) => { rainBuffer = buf; })
+    .catch((err) => { console.warn('rain recording not loaded, using the synthesised rain', err); });
+  return rainLoading;
+}
+function startAmbience() {
+  if (amb || !ctx) return;
+  try {
+    const outdoor = ctx.createGain();
+    outdoor.gain.value = OUTDOOR_GAIN;
+    outdoor.connect(ambience);
+    const lite = Boolean(globalThis.matchMedia?.('(pointer: coarse)').matches); // phones: fewer voices
+    amb = createAmbience(ctx, outdoor, { lite, rainBuffer });
+    amb.setScene(sceneNow());
+    amb.start();
+    // Until the room names a period, follow the clock: look again every minute.
+    periodTimer = setInterval(() => { if (period === null) amb?.setScene(sceneNow()); }, 60000);
+  } catch (err) {
+    amb = null; // the clock, the music and the effects still work without the window sound
+    console.warn('ambience could not start', err);
+  }
 }
 
 // The grandfather clock: a wooden tick every second, the tock a little lower.
@@ -179,105 +185,23 @@ function startLofi() {
   lofiTimer = setInterval(schedule, 500);
 }
 
-// ── Season ambience (learner choice): snow = a soft cold wind, spring = birds, summer = cicadas
-// and crickets, dry season = a dry gusty wind with rustling leaves. All from noise and oscillators.
-function windBed(t, { f0, f1, q, v, rate }) {
-  const src = ctx.createBufferSource();
-  src.buffer = noiseBuffer;
-  src.loop = true;
-  const bp = ctx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.value = f0;
-  bp.Q.value = q;
-  const g = ctx.createGain();
-  g.gain.value = v;
-  src.connect(bp).connect(g).connect(seasonBus);
-  const lfo = ctx.createOscillator(); // gusts: the wind's pitch and loudness swell slowly
-  lfo.frequency.value = rate;
-  const lf = ctx.createGain();
-  lf.gain.value = (f1 - f0) / 2;
-  lfo.connect(lf).connect(bp.frequency);
-  const lg = ctx.createGain();
-  lg.gain.value = v * 0.6;
-  lfo.connect(lg).connect(g.gain);
-  src.start(t);
-  lfo.start(t);
-  seasonNodes.push(src, lfo);
+// ── Scene: season, time of day, rain, curtain ────────────────────────
+// The room calls setScene whenever something it shows changes (partial updates are fine); the ambience
+// crossfades to the new scene over about two seconds. Season is snow | spring | summer | dry, period is
+// morning | day | afternoon | night.
+export function setScene(next = {}) {
+  if (SEASONS.includes(next.season)) season = next.season;
+  if (PERIODS.includes(next.period)) period = next.period;
+  if (typeof next.curtainOpen === 'boolean') curtainOpen = next.curtainOpen;
+  amb?.setScene(sceneNow());
 }
-function chirp(at) { // one bird call: two to four quick falling whistles
-  const n = 2 + Math.floor(Math.random() * 3);
-  const base = 2600 + Math.random() * 1600;
-  for (let i = 0; i < n; i++) {
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    const t0 = at + i * (0.09 + Math.random() * 0.05);
-    o.frequency.setValueAtTime(base * 1.25, t0);
-    o.frequency.exponentialRampToValueAtTime(base * 0.8, t0 + 0.07);
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.035, t0 + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.08);
-    o.connect(g).connect(seasonBus);
-    o.start(t0);
-    o.stop(t0 + 0.1);
-  }
-}
-function cicadas(t) { // a steady buzzing drone that swells, plus slow cricket chirps
-  const o = ctx.createOscillator();
-  o.type = 'sawtooth';
-  o.frequency.value = 4200;
-  const am = ctx.createOscillator(); // the fast pulsing of the buzz
-  am.frequency.value = 38;
-  const amg = ctx.createGain();
-  amg.gain.value = 0.5;
-  const g = ctx.createGain();
-  g.gain.value = 0.5;
-  am.connect(amg).connect(g.gain);
-  const hp = ctx.createBiquadFilter();
-  hp.type = 'bandpass';
-  hp.frequency.value = 5200;
-  hp.Q.value = 3;
-  const out = ctx.createGain();
-  out.gain.value = 0.012;
-  const swell = ctx.createOscillator();
-  swell.frequency.value = 0.07;
-  const sw = ctx.createGain();
-  sw.gain.value = 0.008;
-  swell.connect(sw).connect(out.gain);
-  o.connect(g).connect(hp).connect(out).connect(seasonBus);
-  o.start(t); am.start(t); swell.start(t);
-  seasonNodes.push(o, am, swell);
-}
-function cricket(at) {
-  for (let i = 0; i < 3; i++) tone(at + i * 0.06, { f: 4700, v: 0.02, dur: 0.035, type: 'sine', bus: seasonBus });
-}
-function rustle(at) { // dry leaves skittering
-  for (let i = 0; i < 6; i++) hit(at + i * 0.03 + Math.random() * 0.03, { f: 2500 + Math.random() * 2500, q: 2, v: 0.04, dur: 0.04, bus: seasonBus });
-}
-function startSeasonSound() {
-  for (const n of seasonNodes) { try { n.stop(); } catch { /* already stopped */ } }
-  seasonNodes = [];
-  clearInterval(seasonTimer);
-  if (!ctx) return;
-  const t = ctx.currentTime + 0.05;
-  if (season === 'snow') windBed(t, { f0: 380, f1: 700, q: 0.9, v: 0.05, rate: 0.06 });
-  if (season === 'dry') windBed(t, { f0: 900, f1: 1800, q: 0.6, v: 0.04, rate: 0.11 });
-  if (season === 'summer') cicadas(t);
-  seasonTimer = setInterval(() => {
-    if (!ctx || ctx.state !== 'running') return;
-    const now = ctx.currentTime;
-    if (season === 'spring' && Math.random() < 0.45) chirp(now + Math.random() * 0.5);
-    if (season === 'summer' && Math.random() < 0.5) cricket(now + Math.random() * 0.5);
-    if (season === 'dry' && Math.random() < 0.25) rustle(now + Math.random() * 0.5);
-  }, 900);
-}
-// Called by the room whenever the season changes (and once at start).
-export function setSeasonSound(name) {
-  season = name;
-  if (started) startSeasonSound();
-}
+// The older call, season only.
+export function setSeasonSound(name) { setScene({ season: name }); }
+// The breeze (0..1), about ten times a second, so the sound swells with the swaying trees.
+export function setWind(level) { amb?.setWind(Number(level) || 0); }
 export function setRain(on) {
   try { localStorage.setItem(RAIN_KEY, on ? 'on' : 'off'); } catch { /* this visit only */ }
-  if (rainBus) rainBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.4);
+  amb?.setScene(sceneNow());
 }
 
 // ── Effects ──────────────────────────────────────────────────────────
@@ -506,6 +430,7 @@ export function lampSwitch(on) {
 // The curtain: a fabric swish along the rod and the rings rattling as they slide. Opening rises in
 // pitch, closing falls.
 export function curtainSlide(opening) {
+  setScene({ curtainOpen: Boolean(opening) }); // the window sound closes and opens with the curtain
   if (!live()) return;
   played.curtainSlide = (played.curtainSlide ?? 0) + 1;
   const t = ctx.currentTime;
@@ -573,14 +498,15 @@ export async function setSound(on) {
     await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 600))]);
     if (!started) {
       started = true;
-      startRain();
+      await Promise.race([loadRainRecording(), new Promise((r) => setTimeout(r, 4000))]); // 0.8 MB; the code-made rain is the fallback
+      startAmbience();
       startClock();
       startLofi();
-      startSeasonSound();
-    }
+    } else amb?.start(); // after SOUND was switched off, the window sound comes back
     master.gain.setTargetAtTime(reducedMotion() ? 0.7 : 0.7, ctx.currentTime, 0.4); // fade in
   } else if (ctx) {
     master.gain.setTargetAtTime(0, ctx.currentTime, 0.15); // fade out
+    amb?.stop(); // the window sound fades with it, then lets go of its nodes
   }
   return on;
 }
@@ -625,5 +551,8 @@ if (globalThis.document) {
 // Checks only: what the browser does when the page goes to the background.
 export const __suspendForCheck = () => ctx?.suspend();
 
-export const soundState = () => ({ music: musicOn(), musicGain: musicBus?.gain.value ?? null, on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played }, season, seasonNodes: seasonNodes.length, rain: rainOn(), rainGain: rainBus?.gain.value ?? null });
+export const soundState = () => {
+  const a = amb?.state() ?? null;
+  return { music: musicOn(), musicGain: musicBus?.gain.value ?? null, on: soundOn(), ctx: ctx?.state ?? 'none', started, gain: master?.gain.value ?? 0, played: { ...played }, season, seasonNodes: a?.seasonNodes ?? 0, rain: rainOn(), rainGain: a ? a.rainGain : null, period: scenePeriod(), curtainOpen, ambience: a };
+};
 export { lofiTimer, tickTimer };

@@ -261,6 +261,14 @@ The learner asked what could be added to the core while there is time left, and 
 - Weather outside the glass: falling snow, drifting spring petals, dry leaves; a heat shimmer over the road in summer.
 - The ambience follows the season (learner choice): a soft cold wind in snow, birds in spring, cicadas and crickets in summer, a dry gusty wind with rustling leaves in the dry season. Rain plays only when RAIN ON is picked.
 
+## Alive Room Round (learner requests, 5 Oct 2026)
+- **Wind by day:** a breeze moves the trees, palms and low plants outside the window, not the houses. Stronger in the dry season, softer in snow; none at night or with REDUCE MOTION. The curtain stirs with it.
+- **Fireflies:** on a calm night outside winter, soft yellow-green lights drift over the gardens. Not in the rain, not by day.
+- **Water on the glass:** with RAIN ON, small beads run down the pane and leave wet trails (the learner found the first beads too big, so they were halved).
+- **Sound, redesigned:** the outdoor sound follows the season (4), the time of day (4) and the curtain (closed = duller and quieter). The rain is a real recording, "Rain (on the window)" by DonRain (Pixabay Content License), because the learner found the code-made rain strange; the code-made rain stays as a fallback if the file cannot load.
+- **Simon, the cat:** a sleeping cat on the floor, new pose and coat on every visit (curled, loaf, side, sploot, croissant, sphinx; belly-up exists but is not picked, because it read as a fallen cat). He breathes slowly; his name SIMON shows when the pointer is on him, and on a tap on a touch screen. `?cat=` and `?pose=` fix him for filming.
+- Why: "I want the room to feel alive." Everything is still made in code except the rain recording and the pictures.
+
 ## Deferred From the POC
 - **Archiving tapes** — the learner chose permanent erase instead (see Core Additions).
 - **Editing a saved tape** — not discussed; not needed for the demo. Record a new tape instead.
