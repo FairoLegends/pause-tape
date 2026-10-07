@@ -66,15 +66,24 @@ const periodFor = (hour) => (hour >= 5 && hour < 10 ? 'morning' : hour >= 10 && 
 const scenePeriod = () => period ?? periodFor(new Date().getHours()); // the same hours as the room's clock
 const sceneNow = () => ({ season, period: scenePeriod(), rain: rainOn(), curtainOpen });
 // The rain is a real recording (DonRain, "Rain (on the window)", Pixabay Content License), cut into a 60 s loop.
-// It is fetched and decoded once; if that fails, the code-made rain plays instead.
+// It is the only rain: the code-made one was removed (learner request, 7 Oct 2026). The other sounds don't
+// wait for it; it is handed to the ambience as soon as it is decoded and the rain fades in then, like an
+// Addressable that finishes loading after the scene has started. A failed download is tried again.
 let rainBuffer = null;
 let rainLoading = null;
+let rainTries = 0;
 function loadRainRecording() {
+  if (rainBuffer || !ctx) return Promise.resolve();
   rainLoading ??= fetch(new URL('../assets/audio/rain-window.mp3', import.meta.url))
     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
     .then((b) => ctx.decodeAudioData(b))
-    .then((buf) => { rainBuffer = buf; })
-    .catch((err) => { console.warn('rain recording not loaded, using the synthesised rain', err); });
+    .then((buf) => { rainBuffer = buf; amb?.setRainBuffer(buf); })
+    .catch((err) => {
+      rainLoading = null;
+      rainTries++;
+      console.warn('rain recording not loaded yet; the rain stays quiet until it is', err);
+      if (rainTries < 3) setTimeout(loadRainRecording, 8000 * rainTries); // then again when RAIN is switched on
+    });
   return rainLoading;
 }
 function startAmbience() {
@@ -201,6 +210,7 @@ export function setSeasonSound(name) { setScene({ season: name }); }
 export function setWind(level) { amb?.setWind(Number(level) || 0); }
 export function setRain(on) {
   try { localStorage.setItem(RAIN_KEY, on ? 'on' : 'off'); } catch { /* this visit only */ }
+  if (on && started) { rainTries = 0; loadRainRecording(); } // still missing after earlier tries: try again
   amb?.setScene(sceneNow());
 }
 
@@ -498,7 +508,7 @@ export async function setSound(on) {
     await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 600))]);
     if (!started) {
       started = true;
-      await Promise.race([loadRainRecording(), new Promise((r) => setTimeout(r, 4000))]); // 0.8 MB; the code-made rain is the fallback
+      loadRainRecording(); // 0.84 MB, not awaited: the rain joins the scene when it has arrived
       startAmbience();
       startClock();
       startLofi();

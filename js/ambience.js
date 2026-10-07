@@ -1,5 +1,5 @@
-// Outdoor ambience: the view through the room's window, made entirely in code (Web Audio API).
-// No audio files, no samples, no recordings. Like an AudioMixer group in Unity: every outdoor sound
+// Outdoor ambience: the view through the room's window, made in code (Web Audio API), except the rain,
+// which is one recording handed in by sound.js (options.rainBuffer). Like an AudioMixer group in Unity: every outdoor sound
 // (birds, insects, wind, rain on clay roof tiles) goes into one "outdoor bus" that models the window
 // (a low-pass that closes with the curtain, a short room reverb) and then into the destination.
 //
@@ -138,69 +138,6 @@ function toBuffer(ctx, samples) {
   return buf;
 }
 
-// Water running off the eaves. Each is a tiny grain made by maths.
-function synthBubble(sr, r, big) { // a rising "plip" / "plop": a bubble's pitch climbs as it rings out
-  const n = Math.round(0.16 * sr);
-  const y = new Float32Array(n);
-  const f0 = big ? r.logRange(300, 800) : r.logRange(520, 1700);
-  const rise = r.range(0.3, 0.9);
-  const tr = r.range(0.015, 0.04);
-  const ta = r.range(0.014, 0.034);
-  let ph = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / sr;
-    ph += (TAU * f0 * (1 + rise * (1 - Math.exp(-t / tr)))) / sr;
-    y[i] = Math.exp(-t / ta) * Math.sin(ph) * Math.min(1, t / 0.0015) * Math.min(1, (n - i) / (0.004 * sr));
-  }
-  peakTo(y);
-  return y;
-}
-function synthDrip(sr, r) { // a drop off the roof edge landing in water: a small, quick "plink"
-  const n = Math.round(0.14 * sr);
-  const y = new Float32Array(n);
-  const f0 = r.logRange(900, 2300);
-  const rise = r.range(0.4, 1.1);
-  const tr = r.range(0.006, 0.016);
-  const ta = r.range(0.022, 0.06);
-  let ph = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / sr;
-    ph += (TAU * f0 * (1 + rise * (1 - Math.exp(-t / tr)))) / sr;
-    y[i] = Math.exp(-t / ta) * Math.sin(ph) * Math.min(1, t / 0.001) * Math.min(1, (n - i) / (0.004 * sr));
-  }
-  const nn = Math.round(0.0015 * sr);
-  for (let i = 0; i < nn; i++) y[i] += 0.25 * (r.f() * 2 - 1) * (1 - i / nn);
-  peakTo(y);
-  return y;
-}
-// A raindrop on a fired-clay tile: a damped "tok" (a few inharmonic ceramic modes), a hollow body
-// resonance from the air under the tile, and a tiny noise burst for the contact. 'sleet' is duller.
-function synthTile(sr, r, kind) {
-  const sleet = kind === 'sleet';
-  const n = Math.round((sleet ? 0.04 : 0.07) * sr);
-  const y = new Float32Array(n);
-  const f0 = sleet ? r.logRange(650, 1500) : r.logRange(900, 2800);
-  const modes = sleet
-    ? [[1, 0.9, 0.0035], [1.6, 0.3, 0.0024]]
-    : [[1, 1, 0.0075], [1.59, 0.55, 0.0055], [2.2, 0.32, 0.004], [2.9, 0.16, 0.003]];
-  const scale = r.range(0.75, 1.4);
-  const phases = modes.map(() => r.f() * TAU);
-  const fb = r.range(300, 560);
-  const ab = sleet ? 0.12 : r.range(0.25, 0.6);
-  const tb = r.range(0.012, 0.024);
-  const noise = new Float32Array(n);
-  for (let i = 0; i < n; i++) noise[i] = (r.f() * 2 - 1) * Math.exp(-i / sr / (sleet ? 0.004 : 0.0016));
-  runBiquad(rbj('bp', sr, Math.min(sr * 0.3, f0 * 1.3), 1.4), noise);
-  const na = sleet ? r.range(1, 1.8) : r.range(0.35, 0.8);
-  for (let i = 0; i < n; i++) {
-    const t = i / sr;
-    let v = ab * Math.exp(-t / tb) * Math.sin(TAU * fb * t) + na * noise[i];
-    for (let k = 0; k < modes.length; k++) v += modes[k][1] * Math.exp(-t / (modes[k][2] * scale)) * Math.sin(TAU * f0 * modes[k][0] * t + phases[k]);
-    y[i] = v * Math.min(1, t / 0.0004) * Math.min(1, (n - i) / (0.002 * sr));
-  }
-  peakTo(y);
-  return y;
-}
 function synthLeaf(sr, r, dry) { // a tiny leaf rustle: a few soft crinkles of band-passed noise
   const n = Math.round((dry ? 0.07 : 0.14) * sr);
   const y = new Float32Array(n);
@@ -260,11 +197,11 @@ const LIMIT_CURVE = (() => {
 // ── What plays in which scene ──────────────────────────────────────────────────────────────────
 // Levels are in dB relative to each layer's standard loudness (REF_DB below brings every layer to a
 // comparable level when measured alone, so these numbers can be read as a mixing desk).
-const RAIN = { // per season: tile hits per second, overall trim and wash/flow levels (dB), water events per second
-  summer: { rec: 0, hits: 130, trim: -3, wash: -2, flow: -2, bubbles: 14, drips: 1.6, duckBirds: -16, duckInsects: -11, thunder: true, tile: 'tile' },
-  spring: { rec: -3, hits: 75, trim: -2, wash: -6, flow: -6, bubbles: 8, drips: 1.1, duckBirds: -9, duckInsects: -6, thunder: false, tile: 'tile' },
-  dry: { rec: -6, hits: 48, trim: 0, wash: -10, flow: -10, bubbles: 5, drips: 0.8, duckBirds: -6, duckInsects: -4, thunder: false, tile: 'tile' },
-  snow: { rec: -9, hits: 40, trim: 0, wash: -10, flow: -12, bubbles: 2.5, drips: 0.5, duckBirds: 0, duckInsects: 0, thunder: false, tile: 'sleet' },
+const RAIN = { // per season: the recording's level (dB), how much the birds and insects duck under it, thunder
+  summer: { rec: 0, duckBirds: -16, duckInsects: -11, thunder: true },
+  spring: { rec: -3, duckBirds: -9, duckInsects: -6, thunder: false },
+  dry: { rec: -6, duckBirds: -6, duckInsects: -4, thunder: false },
+  snow: { rec: -9, duckBirds: 0, duckInsects: 0, thunder: false },
 };
 
 const TRIM = { 'summer:day': 3, 'summer:night': 3.5, 'spring:day': -1, 'dry:day': -1, 'snow:night': 4.5, 'snow:day': 2, 'snow:morning': 2, 'snow:afternoon': 2 };
@@ -279,8 +216,9 @@ function plan(scene, lite, recorded = false) {
   const trim = TRIM[`${season}:${period}`] ?? 0;
   const add = (kind, p, db) => list.push({ kind, p, db: db + (kind.startsWith('rain') || kind === 'thunder' ? 0 : trim), key: `${kind}:${JSON.stringify(p)}` });
   const R = RAIN[season];
-  const dBird = rain ? R.duckBirds : 0;
-  const dIns = rain ? R.duckInsects : 0;
+  const wet = rain && recorded; // the rain is heard only once its recording has loaded
+  const dBird = wet ? R.duckBirds : 0;
+  const dIns = wet ? R.duckInsects : 0;
   const cic = (n) => (lite ? Math.max(2, Math.round(n * 0.5)) : n);
   const cri = (n) => (lite ? Math.max(2, Math.round(n * 0.65)) : n);
   const bouts = (n) => Math.round(n * (lite ? 0.6 : 1));
@@ -338,21 +276,17 @@ function plan(scene, lite, recorded = false) {
       add('cricket', { voices: cri(4), lo: 2600, hi: 3300, pLo: 0.75, pHi: 1.0, bLo: 8, bHi: 24, restMean: 5, restMin: 2 }, -5 + dIns);
     }
   }
-  if (rain) {
-    if (recorded) {
-      // The real recording (DonRain, Pixabay): one looping layer, lighter in the quieter seasons.
-      add('rainRec', { season }, R.rec);
-    } else {
-      add('rainWash', { season }, R.wash + R.trim);
-      add('rainHits', { season, rate: Math.round(R.hits * (lite ? 0.55 : 1)), tile: R.tile }, R.trim);
-      add('rainFlow', { season, bubbles: R.bubbles * (lite ? 0.6 : 1), drips: R.drips }, R.flow + R.trim);
-    }
+  if (wet) {
+    // The real recording (DonRain, Pixabay): one looping layer, lighter in the quieter seasons. There is
+    // no code-made rain any more (learner request, 7 Oct 2026: a friend's laptop on a slow connection
+    // played it), so until the file has loaded the rain is quiet, and it joins in when it arrives.
+    add('rainRec', { season }, R.rec);
     if (R.thunder) add('thunder', { lo: 45, hi: 130 }, -13);
   }
   return list;
 }
 export function describeScene(scene, lite = false) {
-  return plan({ season: 'spring', period: 'day', rain: false, ...scene }, lite).map(({ kind, p, db }) => ({ kind, p, db }));
+  return plan({ season: 'spring', period: 'day', rain: false, ...scene }, lite, true).map(({ kind, p, db }) => ({ kind, p, db }));
 }
 
 // Wind beds: which noise, which filter, and how the filter and loudness follow the wind level.
@@ -367,7 +301,7 @@ const WIND = {
 // 100 ms envelope (-30 dBFS(A) at 0 dB); the numbers below come from those isolated renders.
 const REF_DB = {
   wind: -7.8, leaves: -16, cicada: 2, cricket: -17, birds: -15, dove: -18, bee: -16, owl: -17, crow: -8,
-  gecko: -11, frog: -12, thunder: -6, rainWash: -19.8, rainHits: -17, rainFlow: -21.8, rainRec: 0,
+  gecko: -11, frog: -12, thunder: -6, rainRec: 0,
 };
 
 // ── The engine ─────────────────────────────────────────────────────────────────────────────────
@@ -380,7 +314,7 @@ export function createAmbience(ctx, destination, options = {}) {
   const sr = ctx.sampleRate;
   const voiceCap = options.voiceCap ?? (lite ? 12 : 24);
   const noiseSeconds = lite ? 12 : 16; // the shortest variant is still 8.5 s
-  const recBuffer = options.rainBuffer ?? null;
+  let recBuffer = options.rainBuffer ?? null; // can also arrive later, through setRainBuffer()
   const planOf = options.plan ?? ((s) => plan(s, lite, Boolean(recBuffer)));
   const refDb = { ...REF_DB, ...(options.refDb ?? {}) };
   const rareScale = options.rareScale ?? 1; // previews only: < 1 makes rare sounds (owl, crow...) more frequent
@@ -412,9 +346,6 @@ export function createAmbience(ctx, destination, options = {}) {
   const noise = (kind, variant = 0) => (noises[`${kind}:${variant}`] ??= makeNoiseBuffer(ctx, kind, noiseSeconds * NOISE_LEN[variant], dsp));
   const banks = {};
   const bank = (name, make, n) => (banks[name] ??= Array.from({ length: lite ? Math.ceil(n * 0.6) : n }, () => toBuffer(ctx, make())));
-  const tileBank = (kind) => bank(`tile-${kind}`, () => synthTile(sr, dsp, kind), 30);
-  const bubbleBank = () => bank('bubble', () => synthBubble(sr, dsp, dsp.chance(0.35)), 24);
-  const dripBank = () => bank('drip', () => synthDrip(sr, dsp), 14);
   const leafBank = (dry) => bank(dry ? 'leaf-dry' : 'leaf-green', () => synthLeaf(sr, dsp, dry), 16);
   let pulse = null; // a smooth pulse shape for insect buzz: (1 + cos)^2 / 4 as a PeriodicWave
   const pulseWave = () => (pulse ??= ctx.createPeriodicWave(new Float32Array([0, 0.5, 0.125]), new Float32Array(3), { disableNormalization: true }));
@@ -1146,113 +1077,6 @@ export function createAmbience(ctx, destination, options = {}) {
       layer.sources.push(src);
     },
 
-    // Rain, part 1: the soft wash of many small drops (pink noise, low-passed near 3.5 kHz).
-    rainWash(layer, p, t) {
-      const wob = G(1);
-      wob.connect(layer.near.trim);
-      layer.persistent += 1;
-      for (const [side, variant] of [[-1, 0], [1, 1], [0, 2]]) {
-        const buf = noise('pink', variant);
-        const s = BUF(buf, true);
-        const hp = BQ('highpass', 180, Q_SOFT);
-        const lp = BQ('lowpass', 3500, Q_SOFT);
-        const pn = PAN(0.5 * side);
-        s.connect(hp); hp.connect(lp); lp.connect(pn); pn.connect(wob);
-        s.start(t, rng.f() * (buf.duration - 1));
-        layer.sources.push(s);
-      }
-      layer.gens.push({
-        name: 'wash', next: 0,
-        fire(tt) {
-          wob.gain.setTargetAtTime(dbToGain(rng.range(-2.5, 1.5)), tt, 1.5);
-          return rng.range(2, 5);
-        },
-      });
-    },
-
-    // Rain, part 2: drops hitting clay tiles, each a different "tok" or "tik".
-    rainHits(layer, p) {
-      const hits = tileBank(p.tile);
-      const g = layer.near;
-      let k = 1;
-      layer.gens.push({
-        name: 'hits', next: 0,
-        fire(t) {
-          k = clamp(k + rng.gauss() * 0.04 + (1 - k) * 0.02, 0.7, 1.3); // the rain comes in slow waves
-          voiceOf(t, t + 0.14, 0.2, () => {
-            const s = BUF(hits[rng.int(0, hits.length - 1)], false);
-            s.playbackRate.value = rng.range(0.86, 1.2);
-            const a = G(dbToGain(-2 - 22 * rng.f() ** 1.5));
-            s.connect(a); a.connect(panOf(g));
-            s.start(t);
-            return [s];
-          });
-          count('rainHit');
-          return clamp(rng.exp(1 / (p.rate * k)), 0.003, 1);
-        },
-      });
-    },
-
-    // Rain, part 3: the trickle and gurgle of water running off the eaves (band-passed noise that
-    // wanders, plip-plop bubbles that rise in pitch, and a few drips from the roof edge).
-    rainFlow(layer, p, t) {
-      const bubbles = bubbleBank();
-      const drips = dripBank();
-      const g = layer.near;
-      const bed = G(0.4);
-      bed.connect(g.trim);
-      layer.persistent += 1;
-      const bps = [];
-      for (const [side, variant] of [[-1, 1], [1, 2], [0, 0]]) {
-        const buf = noise('pink', variant);
-        const s = BUF(buf, true);
-        const bp = BQ('bandpass', 1000, 2.2);
-        const pn = PAN(0.5 * side);
-        s.connect(bp); bp.connect(pn); pn.connect(bed);
-        s.start(t, rng.f() * (buf.duration - 1));
-        layer.sources.push(s);
-        bps.push(bp);
-      }
-      layer.gens.push(
-        {
-          name: 'swept', next: 0,
-          fire(tt) { // the band of the running water wanders, like a stream over stones
-            for (const bp of bps) bp.frequency.setTargetAtTime(rng.range(650, 1800), tt, 0.6);
-            return rng.range(0.7, 1.8);
-          },
-        },
-        {
-          name: 'bubble', next: 0,
-          fire(tt) {
-            voiceOf(tt, tt + 0.2, 0.2, () => {
-              const s = BUF(bubbles[rng.int(0, bubbles.length - 1)], false);
-              s.playbackRate.value = rng.range(0.85, 1.3);
-              const a = G(dbToGain(-3 - 14 * rng.f()));
-              s.connect(a); a.connect(panOf(g));
-              s.start(tt);
-              return [s];
-            });
-            count('bubble');
-            return clamp(rng.exp(1 / p.bubbles), 0.02, 3);
-          },
-        },
-        {
-          name: 'drip', next: 0,
-          fire(tt) {
-            voiceOf(tt, tt + 0.2, 0.3, () => {
-              const s = BUF(drips[rng.int(0, drips.length - 1)], false);
-              s.playbackRate.value = rng.range(0.85, 1.2);
-              const a = G(dbToGain(-2 - 9 * rng.f()));
-              s.connect(a); a.connect(panOf(g));
-              s.start(tt);
-              return [s];
-            });
-            count('drip');
-            return clamp(rng.exp(1 / p.drips), 0.2, 12);
-          },
-        },
-      );
-    },
   };
 
   // ── the scheduler ──
@@ -1297,6 +1121,12 @@ export function createAmbience(ctx, destination, options = {}) {
     return { ...scene };
   }
   const setRain = (on) => setScene({ rain: Boolean(on) });
+  // The rain recording arrived after start (a slow connection): the rain joins the scene now, fading in.
+  function setRainBuffer(buf) {
+    if (!buf || recBuffer) return;
+    recBuffer = buf;
+    if (running) applyScene(ctx.currentTime + 0.02);
+  }
   function setWind(level) {
     const l = clamp(Number(level) || 0, 0, 1);
     const t = ctx.currentTime;
@@ -1355,7 +1185,7 @@ export function createAmbience(ctx, destination, options = {}) {
     };
   }
 
-  return { setScene, setRain, setWind, start, stop, tick, state, stats: () => ({ dropped: stats.dropped, maxLoad: Math.round(stats.maxLoad * 10) / 10, events: { ...stats.events } }), seed, lite };
+  return { setScene, setRain, setRainBuffer, setWind, start, stop, tick, state, stats: () => ({ dropped: stats.dropped, maxLoad: Math.round(stats.maxLoad * 10) / 10, events: { ...stats.events } }), seed, lite };
 }
 
 // ── Offline rendering (checks and listening previews) ──────────────────────────────────────────
