@@ -135,11 +135,15 @@ The "TAPE SAVED" screen offers **"Add to calendar (.ics)"**, which provides a ca
 
 The event is **all-day** on the return date, named after the project. Its **description contains the first step**, and it has a **morning alarm at 08:00 WIB** on the return date, so the reminder itself says what to do.
 
+**The tape link** (Learner choice, 7 Oct 2026, after an honest review of the Potential Impact criterion: a tape locked for months lived only in one browser's storage, which Safari may clear after 7 days of use without a visit and which a phone or another browser never had. The learner chose the full tape in the link over plain answers in the calendar note, so the answers stay unread until the tape plays.) The description ends with **"Play the tape:"** and a link to the app that carries the whole tape. Opening it in any browser puts the tape on that browser's shelf if it isn't there yet, and plays as usual from there. The answers in the link are packed, not encrypted: anyone with the link can read them. The voice note doesn't travel.
+
 - As the learner, I want a calendar reminder on my return date so that I actually come back.
   - [ ] Pressing "Add to calendar (.ics)" produces an `.ics` file.
   - [ ] Opening the file adds an all-day event on the tape's return date to a calendar app, named after the project.
   - [ ] The event's description contains the tape's first step.
   - [ ] The event has an alarm at 08:00 WIB on the return date.
+  - [ ] The event's description ends with "Play the tape:" and a link; opening that link in a browser with an empty shelf shows the tape there, with the same answers.
+  - [ ] Opening the link where the tape already is changes nothing; a damaged link says "THAT TAPE LINK IS BROKEN" and adds nothing.
   - [ ] Leaving the "TAPE SAVED" screen returns to the shelf with the new tape shown.
 
 ### Early Play
@@ -205,7 +209,7 @@ A tape that already has minutes can be played again to re-read the note, "if I f
 - **Timer overtime** — keeps counting as "+mm:ss" in a different color; button still works.
 - **App closed mid-playback or mid-timer** — nothing is recorded; the tape stays READY without minutes and plays again from the start. A locked tape played early returns to locked.
 - **Completed tape** — label shows minutes; replays without timer/button; minutes never overwritten.
-- **Persistence** — tapes, including their answers and recorded minutes, remain after closing and reopening the app.
+- **Persistence** — tapes, including their answers and recorded minutes, remain after closing and reopening the app. The app asks the browser to keep them for good (persistent storage), and the calendar event's tape link brings a tape back to any browser.
 
 ## Product Decisions
 - **The TV starts on a standby screen, and clicking the VCR opens the shelf** (revised during the build; this replaces "the shelf is the first screen") — the standby screen still shows the status, e.g. "▶ 1 TAPE READY", and the VCR glows green when a tape is due, "so I still know right away that a tape is waiting, and opening the shelf feels like turning on a real VCR." The original reason still holds: on return, "I immediately see the tape I recorded before, so I know what to do."
@@ -272,7 +276,7 @@ The learner asked what could be added to the core while there is time left, and 
 ## Deferred From the POC
 - **Archiving tapes** — the learner chose permanent erase instead (see Core Additions).
 - **Editing a saved tape** — not discussed; not needed for the demo. Record a new tape instead.
-- **Accounts and syncing across devices** — tapes live where the app is used; the demo doesn't need more.
+- **Accounts and syncing across devices** — tapes live where the app is used; the demo doesn't need more. The calendar's tape link (see Calendar Reminder) carries one tape to another device without an account.
 - **In-app notifications** — the `.ics` calendar reminder covers "come back on the date."
 
 ## Possible Later Enhancements

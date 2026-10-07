@@ -55,7 +55,8 @@ function utcStamp(now) {
     + `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
 }
 
-export function buildIcs(tape, now = new Date()) {
+// link: the tape link (js/tapelink.js). Without one the file is exactly as before.
+export function buildIcs(tape, now = new Date(), link = '') {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -68,7 +69,10 @@ export function buildIcs(tape, now = new Date()) {
     `DTSTART;VALUE=DATE:${icsDate(tape.returnDate)}`,
     `DTEND;VALUE=DATE:${nextDay(tape.returnDate)}`,
     `SUMMARY:${escapeText(`▶ ${tape.project} — tape ready`)}`,
-    `DESCRIPTION:${escapeText(`First step: ${tape.firstStep}`)}`,
+    // The notes end with the tape link, which puts the whole tape back on any browser's shelf; the URL
+    // line is the same link for calendar apps that show one (prd.md > Calendar Reminder (.ics)).
+    `DESCRIPTION:${escapeText(link ? `First step: ${tape.firstStep}\n\nPlay the tape: ${link}` : `First step: ${tape.firstStep}`)}`,
+    ...(link ? [`URL:${link}`] : []),
     'TRANSP:TRANSPARENT',
     // The new Outlook for Windows showed a date-only event as 07:00 to 07:00 the next day (shifted by
     // the UTC offset) until these two Microsoft lines said "all day" and "free" (learner's test, 2 Oct 2026).
@@ -93,8 +97,8 @@ export function icsFileName(tape) {
 }
 
 // A Blob is a file made in memory; a temporary link hands it to the browser to save.
-export function downloadIcs(tape) {
-  const blob = new Blob([buildIcs(tape)], { type: 'text/calendar;charset=utf-8' });
+export function downloadIcs(tape, tapeUrl = '') {
+  const blob = new Blob([buildIcs(tape, new Date(), tapeUrl)], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

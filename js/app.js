@@ -2,7 +2,7 @@
 // SetActive) and sets the VHS strength for each screen, the way VHSDriver sets a float
 // on the fullscreen material (spec.md > Screen Switcher).
 
-import { loadTapes, saveTapes, visibleTapes, eraseSample, buildBackup, parseBackup, mergeTapes } from './store.js';
+import { loadTapes, saveTapes, keepTapes, visibleTapes, eraseSample, buildBackup, parseBackup, mergeTapes } from './store.js';
 import { todayLocal, formatVcrDate, backOnItStats } from './tapes.js';
 import { renderShelf } from './shelf.js';
 import { initRecord } from './record.js';
@@ -10,6 +10,7 @@ import { initPlayback, PACE } from './playback.js';
 import { startCrt } from './crt.js';
 import { switchGlitch } from './motion.js';
 import { downloadIcs } from './ics.js';
+import { tapeLink, tapeFromHash } from './tapelink.js';
 import { reducedMotion, highContrast, musicOn, onPrefsChange } from './prefs.js';
 import { setMusic, resumeOnFirstClick, screenChange, blip, tapeIn, vcrClick } from './sound.js';
 import { saveVoice, deleteVoice } from './voice.js';
@@ -34,6 +35,7 @@ const record = initRecord(screens.record, {
   onSave(tape, voiceBlob) {
     tapes = [...tapes, tape];
     saveTapes(tapes);
+    keepTapes(); // ask the browser to keep the tapes for good (store.js)
     // The voice note goes into IndexedDB; if that fails (storage full or blocked), the tape keeps
     // its written answers and simply has no note.
     if (voiceBlob) {
@@ -90,6 +92,7 @@ function show(name, { force = false } = {}) {
   document.body.dataset.current = name;
   current = name;
   if (name === 'shelf') drawShelf();
+  else hideNote(); // the note line belongs to the shelf
   hooks[name]?.enter();
   switchGlitch(from, screens[name], { force });
   if (from && from !== screens[name]) {
@@ -165,7 +168,7 @@ document.querySelector('[data-action="to-shelf"]').addEventListener('click', () 
 // The calendar file is optional: the tape is already saved whether or not it's downloaded.
 document.querySelector('[data-action="add-calendar"]').addEventListener('click', () => {
   if (!savedTape) return;
-  const name = downloadIcs(savedTape);
+  const name = downloadIcs(savedTape, tapeLink(savedTape, appAddress()));
   const note = screens.saved.querySelector('[data-ics-note]');
   note.textContent = `SAVED ${name.toUpperCase()}`;
   note.hidden = false;
@@ -189,11 +192,17 @@ document.querySelector('[data-action="erase-cancel"]').addEventListener('click',
 
 // BACKUP saves the tapes as a .json file (not the photo); RESTORE adds the tapes from one.
 const backupNote = screens.shelf.querySelector('[data-backup-note]');
-function note(text) {
+// sticky: a note about a tape link stays until the player leaves the shelf. In the room the shelf is
+// only seen once the camera is in the TV, which can be long after the page opened.
+function note(text, { sticky = false } = {}) {
   backupNote.textContent = text;
   backupNote.hidden = false;
   clearTimeout(note.timer);
-  note.timer = setTimeout(() => { backupNote.hidden = true; }, 5000);
+  if (!sticky) note.timer = setTimeout(hideNote, 5000);
+}
+function hideNote() {
+  clearTimeout(note.timer);
+  backupNote.hidden = true;
 }
 document.querySelector('[data-action="backup"]').addEventListener('click', () => {
   const blob = new Blob([buildBackup(tapes)], { type: 'application/json' });
@@ -216,6 +225,7 @@ restoreFile.addEventListener('change', async () => {
   const merged = mergeTapes(tapes, incoming);
   tapes = merged.list;
   saveTapes(tapes);
+  keepTapes();
   drawShelf();
   note(merged.added ? `RESTORED ${merged.added} ${merged.added === 1 ? 'TAPE' : 'TAPES'}` : 'NOTHING NEW IN THAT BACKUP');
 });
@@ -230,6 +240,31 @@ startCrt(document.querySelector('.tv__screen'), {
   active: () => !room || room.nearTv(),
   maxDpr: touchOnly ? 1.5 : 2, // phones: a lighter layer
 });
+
+// ── Tape link (js/tapelink.js): the calendar event's copy of a tape ──
+// Opening the link puts its tape on this browser's shelf if it isn't here yet: a phone, another
+// browser, or one that cleared its storage. Like RESTORE, nothing on the shelf is overwritten.
+function appAddress() {
+  return location.origin + location.pathname; // the app itself, without demo pins (?time=…) or a hash
+}
+function takeTapeFromLink() {
+  const found = tapeFromHash(location.hash);
+  if (!found) return;
+  history.replaceState(null, '', location.pathname + location.search); // a clean address bar
+  if (found.broken) { note('THAT TAPE LINK IS BROKEN', { sticky: true }); return; }
+  const merged = mergeTapes(tapes, [found.tape]);
+  if (!merged.added) return; // already on this shelf
+  tapes = merged.list;
+  try { saveTapes(tapes); } catch { /* storage blocked: the tape is on the shelf for this visit */ }
+  keepTapes();
+  if (current === 'shelf') drawShelf();
+  note('TAPE RESTORED FROM LINK', { sticky: true });
+}
+takeTapeFromLink();
+window.addEventListener('hashchange', takeTapeFromLink);
+// Tapes from earlier visits: ask once per load too (Chrome, Edge and Safari decide without a prompt;
+// Firefox asks the player once and remembers the answer).
+if (tapes.length) keepTapes();
 
 show('shelf');
 

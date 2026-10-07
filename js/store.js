@@ -22,6 +22,21 @@ export function saveTapes(list) {
   localStorage.setItem(KEY, JSON.stringify(list));
 }
 
+// Ask the browser to keep the tapes until the player deletes them (persistent storage), like asking
+// the OS not to clean up a save folder. Without it a browser may clear the site's data to free space,
+// and Safari can clear it after 7 days of use without a visit, shorter than most pauses. Chrome and
+// Edge decide silently, Firefox asks the player once, and Safari mostly says no outside a Home Screen
+// web app; the calendar's tape link (js/tapelink.js) is the copy that outlives all of that.
+export function keepTapes() {
+  try {
+    const storage = globalThis.navigator?.storage;
+    if (!storage?.persist) return;
+    Promise.resolve(storage.persisted?.() ?? false)
+      .then((already) => already || storage.persist())
+      .catch(() => {});
+  } catch { /* not available here: the tapes are still saved as before */ }
+}
+
 // ── The sample tape (for a first visit, and for judges) ──────────────
 // Shown only while the shelf has none of the player's own tapes, until the player erases it. It's
 // always READY and never saved: playing it and pressing "I'm back on it" leaves it as it was.

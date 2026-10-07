@@ -26,7 +26,7 @@ On a phone or tablet the 3D room works by touch, in a lighter mode so it stays s
 
 - **Tape shelf:** your tapes as VHS cassettes. Locked tapes show a countdown, but can be played early after a confirmation; READY tapes glow green; finished tapes show "BACK ON IT · N MIN". Above the shelf: your average BACK ON IT time.
 - **Record screen:** a camcorder viewfinder with a running REC clock, the four questions, an optional voice note (up to 40 seconds), and the return date.
-- **Calendar reminder:** "Add to calendar (.ics)" downloads an all-day event for the return date, with a reminder at 08:00 and your first step in the notes.
+- **Calendar reminder:** "Add to calendar (.ics)" downloads an all-day event for the return date, with a reminder at 08:00 and your first step in the notes. The notes end with a **tape link**: opening it in any browser (your phone, another computer) puts that tape on its shelf.
 - **Playback:** blue VCR loading screen, the "MESSAGE FROM …" intro, your voice note, answers revealed one by one with a tape glitch ("NO SIGNAL" for empty ones), ▶▶ to skip, then the first step and the 10-minute timer.
 - **PAUSE AGAIN:** from the BACK ON IT screen, record the next tape for the same project.
 - **Erase, backup, restore:** ⏏ on a tape erases it (after a confirmation). BACKUP downloads your tapes as a `.json` file, and RESTORE adds them back from one.
@@ -39,7 +39,9 @@ Everything stays in **your browser on this device**. There's no account and no s
 
 - Tapes, settings and your photo are kept in `localStorage`, and voice notes in IndexedDB.
 - Another browser or another device starts with an empty shelf. Use **BACKUP** and **RESTORE** to move your tapes (photos and voice notes aren't included in the backup file).
-- Clearing your browser's site data erases your tapes.
+- Each calendar event carries its own tape: the **tape link** at the end of its notes brings that tape back to any browser, even one that has cleared its storage. The answers are packed into the link, not encrypted, so anyone you share the link with can read them. Voice notes stay in the browser that recorded them.
+- The app asks your browser to keep its data for good (persistent storage). Chrome and Edge decide without asking, Firefox asks you once, and Safari mostly says no. Safari can also clear a site's data after 7 days of use without a visit, which is why the tape link exists.
+- Clearing your browser's site data erases your tapes, except the ones you added to a calendar.
 
 ## Run it locally
 
@@ -86,6 +88,7 @@ Plain HTML, CSS and JavaScript modules: no framework, no build step, no backend.
 - `js/tapes.js`: date and tape rules.
 - `js/shelf.js`, `js/record.js` and `js/playback.js`: the shelf, the Record screen and Playback.
 - `js/ics.js`: the calendar file.
+- `js/tapelink.js`: packs a tape into the calendar's tape link and reads it back.
 - `js/voice.js`: voice notes.
 - `js/sound.js`: all audio.
 - `js/prefs.js`: accessibility switches.

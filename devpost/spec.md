@@ -111,7 +111,7 @@ The entry script. It holds which screen is visible and shows exactly one `<secti
 PRD ref: `prd.md > Screens and Layout`, `prd.md > Look and Feel`.
 
 ### Tape Store (`js/store.js`)
-`loadTapes()` reads the `pausetape.tapes.v1` key and turns the JSON back into a list; if the key is missing or unreadable, it returns an empty list. `saveTapes(list)` writes the list back. It's the only file that touches localStorage.
+`loadTapes()` reads the `pausetape.tapes.v1` key and turns the JSON back into a list; if the key is missing or unreadable, it returns an empty list. `saveTapes(list)` writes the list back. It's the only file that touches localStorage. `keepTapes()` asks the browser for persistent storage (`navigator.storage.persist()`) after a tape is saved, restored, or opened from a link, and once per load when tapes exist; a refusal changes nothing.
 PRD ref: `prd.md > States and Boundaries` (Persistence), `prd.md > Tape Shelf`.
 
 ### Tape Rules (`js/tapes.js`)
@@ -132,7 +132,16 @@ One form with project name, return date (`<input type="date">` with `min` set to
 PRD ref: `prd.md > Recording a Tape`.
 
 ### Tape Saved Screen and Calendar File (`js/ics.js`)
-The Tape Saved screen shows "TAPE SAVED", the **"Add to calendar (.ics)"** button, and a way back to the shelf. `buildIcs(tape)` returns the event text; `downloadIcs(tape)` wraps it in a Blob and triggers a download. See `External Services and Dependencies > The .ics file` for the exact content.
+The Tape Saved screen shows "TAPE SAVED", the **"Add to calendar (.ics)"** button, and a way back to the shelf. `buildIcs(tape, now, link)` returns the event text; `downloadIcs(tape, link)` wraps it in a Blob and triggers a download. `app.js` passes the tape link for the app's own address (`location.origin + location.pathname`, so demo pins such as `?time=` stay out). See `External Services and Dependencies > The .ics file` for the exact content.
+
+### Tape Link (`js/tapelink.js`)
+Learner choice, 7 Oct 2026, after an honest review of the Potential Impact criterion: a tape locked for months lived only in one browser's storage, which Safari may clear after 7 days of use without a visit and which a phone or another browser never had. The learner chose the full tape in the link over plain answers in the calendar note, so the answers stay unread until the tape plays.
+
+- `tapeLink(tape, base)` packs the eight text fields (id, project, returnDate, recordedAt, stopped, firstStep, unsure, why) as a JSON array behind the version tag `pt1`, encodes it as UTF-8 base64url, and returns `base#tape=<code>`. About 650 characters for a tape of the sample's size.
+- The tape rides in the hash, the part of an address a browser never sends to the server.
+- `tapeFromHash(hash)` returns `{ tape }` (a fresh tape: no minutes, no voice note), `{ broken: true }` for a damaged or wrong link, or `null` when the address has no tape.
+- On load and on `hashchange`, `app.js` adds the tape with the same rule as RESTORE (matched by id, nothing overwritten), saves, asks for persistent storage, cleans the hash from the address bar, and shows **TAPE RESTORED FROM LINK** (or **THAT TAPE LINK IS BROKEN**) beside REC until the player leaves the shelf. A tape already on the shelf adds nothing and shows no note.
+PRD ref: `prd.md > Calendar Reminder (.ics)`, `prd.md > States and Boundaries` (Persistence).
 PRD ref: `prd.md > Calendar Reminder (.ics)`.
 
 ### Early Play Confirmation
@@ -208,6 +217,7 @@ BuildWithAI-Basics/
 │   ├── shelf.js          # Draws the shelf and the empty state
 │   ├── record.js         # Record form, ● REC clock, validation, save
 │   ├── ics.js            # Builds and downloads the .ics file
+│   ├── tapelink.js       # Packs a tape into a link and reads it back (the calendar event's copy); no DOM
 │   ├── playback.js       # Blue screen, one-by-one reveal, ▶ PLAY counter, ▶▶, timer, back on it, replay
 │   ├── crt.js            # three.js shader layer over the screen (grain, tracking band, scanlines), follows --vhs
 │   ├── room.js           # The three.js room around the TV (laptop/desktop with WebGL); puts the app screen on the TV glass
@@ -253,7 +263,8 @@ DTSTAMP:20260930T070211Z
 DTSTART;VALUE=DATE:20270110
 DTEND;VALUE=DATE:20270111
 SUMMARY:▶ NO SIGNAL — tape ready
-DESCRIPTION:First step: <the tape's first step>
+DESCRIPTION:First step: <the tape's first step>\n\nPlay the tape: <the tape link>
+URL:<the tape link>
 TRANSP:TRANSPARENT
 X-MICROSOFT-CDO-ALLDAYEVENT:TRUE
 X-MICROSOFT-CDO-BUSYSTATUS:FREE
@@ -267,6 +278,7 @@ END:VCALENDAR
 ```
 
 - **All-day** is `DTSTART;VALUE=DATE`, with `DTEND` the next day.
+- **The tape link** ends the description (most calendar apps make a link in the notes clickable) and is repeated in `URL` for apps that show that field. Long lines fold like any other. Without a link the file is byte-identical to the earlier version (checked).
 - **08:00 WIB alarm** is `TRIGGER:PT8H`, meaning 8 hours after the start of that day in the **device's own time zone**. On the learner's devices, set to WIB, that's 08:00 WIB. A device in another time zone would ring at 08:00 its local time. For this single-user POC that's the intended behavior.
 - **Unverified, test during the build** (learner request):
   - Opening the file in Outlook on the learner's laptop (for the demo; confirmed by the learner that `.ics` opens there). Verify that the all-day event, the description, and the alarm appear.
@@ -281,6 +293,7 @@ Stored in `assets/fonts/` with its license. Loaded with `@font-face` in `base.cs
 
 ## Important Failure Modes
 - **Saved data is missing or corrupted** (someone cleared the browser, or the JSON is broken) → `loadTapes()` returns an empty list and the shelf shows "Record your first tape". The app never crashes on bad data.
+- **The browser cleared its storage before the return date** (Safari after 7 days of use without a visit, a full disk, a cleared history), **or the reminder opens on another device** → the calendar event's tape link puts the tape back on that browser's shelf. Persistent storage, where the browser grants it, makes the first case rarer. A damaged link adds nothing and says so.
 - **The calendar app doesn't import the alarm or can't open the file** → the tape is still saved and the app is unaffected. The limitation is written in the README (learner decision).
 - **Wrong "today" around midnight or time zones** → all dates are compared as local `YYYY-MM-DD` strings from `todayLocal()`, never UTC, so a tape due today is READY in WIB at any hour.
 - **The font file fails to load** → the CSS font stack falls back to the system monospace, so the app looks plainer but works.
@@ -362,6 +375,7 @@ Stored in `assets/fonts/` with its license. Loaded with `@font-face` in `base.cs
 - **Typing inside the room (learner choice, 2 Oct 2026: "zoom penuh ke TV, sehingga form terbaca jelas")**: on the Record screen and every other screen with a form, the camera sits in the full TV zoom of the mockup's play pose, so the app screen fills nearly the whole view; the room is only seen when the player steps back to it.
 - **App screen inside the TV (learner choice A, 2 Oct 2026): `CSS3DRenderer`** from the vendored three@0.186.1 (`examples/jsm/renderers/CSS3DRenderer.js`, same MIT licence, no new library). The real app DOM is placed on the TV glass in 3D, so it shrinks and grows with the camera and stays typeable. CRT curve on the live form (learner choice "1 dan 2", 2 Oct 2026): a thin SVG `feDisplacementMap` barrel filter on the app screen on laptops and desktops (spike: the real form bends and stays typeable); a CSS-only illusion (rounded corners, darker edges, curved glass glare, the VHS lines) on Safari, touch screens and reduced motion, or if the filter breaks inside `CSS3DRenderer`; screens without a form (PLAY, loading) keep the full shader.
 - **A room around the TV, added during `5-build` for the final review, then revised** (see `prd.md > Look and Feel`): a real three.js room instead of flat layers (learner choice: "B, a real 3D room"); the camera turns slightly with the cursor; the objects are simple shapes made in code and AI art is used only for the window view (learner choice: "mixed"); light follows the visitor's local time in four periods, with `?time=` for the demo; the TV starts on a standby screen and the clickable VCR opens the shelf. After the learner marked up a screenshot (orange = light source, yellow = light direction, red cross = remove, green box = where the photo goes), the side table and can were removed, the visible sun, the light shafts and the real light share one direction. The learner then found the left side too empty and the outside too realistic for a cartoon room, so the room was redone: a bookshelf with a sofa in front of it, the cabinet moved to the middle with the frame at one end and a lamp at the other, a curtain that opens and closes on a click, a lamp that switches on and off on a click, and a photo frame that takes the player's own picture (cropped to the frame, shrunk, stored in localStorage, never uploaded; one more localStorage key beside the tapes). Third round (learner markup): the sofa stands out from the shelf and is turned toward the TV, an armchair on the right and a table with books and papers in the middle; the curtain became moving cloth (vertices reshaped every frame); the lamp got a spring pull cord (drag or click); the photo got a PHOTO panel (preview, drag to move, ZOOM slider and wheel; stored as `pausetape.photo.v2` = `{ src, zoom, x, y }`, the v1 picture is migrated); and playing a READY tape runs insert (camera back, cassette into the VCR) → loading (about 3 s, the app's 20-block bar) → play (the camera eases in to the screen). Fourth round: the plant became a grandfather clock modelled in code after the learner's photo, three Seedream paintings hang on the empty walls (`assets/room/painting-*.jpg`), and the seats became a side sofa and an armchair facing each other plus a long low sofa facing the TV, with a walkway and nothing in front of the photo frame. Fifth round, the learner's written layout spec (positions, rotations, scale, floor material and camera only; look, light and interactions unchanged): room 5.0 x 3.6 x 2.6 m with the TV wall at z -1.8; bookshelf (-1.95, -1.66) 0.9 x 0.25 x 1.9; window centred at x 0.1, 1.2 wide; cabinet (0.1, -1.63) 1.6 x 0.35 x 0.55 with the TV at x 0.1, the VCR at x 0.68 and the photo frame left of the TV; lamp on a small side table at (1.18, -1.6); clock (2.25, -1.6) 0.4 x 0.4 x 2.0; rug (0, 0.17) 2.5 x 1.95; coffee table (0, 0.18) 0.8 x 0.45 x 0.4; main sofa (0, 1.33) 1.8 x 0.75 facing the TV; small sofa (-1.98, 0.3) 0.75 x 1.2 facing +x; armchair (1.85, 0.22) 0.7 x 0.75 facing -x; seat 0.42 m, back 0.85 m; one wood floor; left painting on the left wall at 1.5 m over the small sofa; camera (0, 1.5, 2.6) looking at (0, 0.9, -1.6), FOV 45. The night window picture is now made from the day picture with a small image script, because the gateway drops reference images and two generated pictures never matched. It is designed first in `devpost/room-mockup.html` (the learner has no paid Figma plan, so the mockup replaces a Figma design) and only then built into the app. Window art (revised twice at the learner's request, the second time to a semi-cartoon street seen side-on across the road): Codex can't generate images here (its CLI is signed in with a non-OpenAI API key, and OpenAI's Codex pricing page lists image generation as not available on the Free plan). The learner asked for Grok or BytePlus Seedream instead, so the two window pictures (`assets/room/window-day.jpg`, `window-night.jpg`) were generated with Seedream 5.0 pro (`dola-seedream-5-0-pro-260628`) through the OpenAI-compatible API gateway the learner already uses: 2304×1728 (4:3), visible watermark switched off, no text or logos in the prompt. The gateway ignores reference images, so both pictures come from one shared written description of the street. The files keep the C2PA content credentials BytePlus embeds; never strip them. BytePlus's General Terms for AI Services (section 2.1) say the customer owns the Output and BytePlus claims no ownership; the gateway's own terms weren't found. The README credits the model.
+- **The calendar event carries the whole tape as a link (learner choice, 7 Oct 2026).** Learner choice, 7 Oct 2026, after an honest review of the Potential Impact criterion: a tape locked for months lived only in one browser's storage, which Safari may clear after 7 days of use without a visit and which a phone or another browser never had. The learner chose the full tape in the link over plain answers in the calendar note, so the answers stay unread until the tape plays. The app also asks for persistent storage. See `Components > Tape Link`.
 
 ### Implementation details derived from those (AI defaults, accepted by the learner in review)
 - JS modules, served locally with `python -m http.server 8000` (learner confirmed Python 3.11 is installed).
